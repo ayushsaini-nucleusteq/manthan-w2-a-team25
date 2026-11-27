@@ -1,0 +1,97 @@
+.inbox-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.inbox-sort-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--brand-600);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+}
+.inbox-claim-link {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.inbox-title {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.inbox-age {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.inbox-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.inbox-behalf {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.inbox-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.inbox-filters-row > * {
+  min-width: 180px;
+  flex: 1 1 180px;
+}
+.inbox-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-weight: 600;
+}
+.inbox-chain-step {
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--brand-100);
+  color: var(--brand-700);
+  font-size: 0.8125rem;
+}
+.inbox-chain-step.is-current {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: var(--text-inverse);
+}
+@media (max-width: 719.98px) {
+  .inbox-title { max-width: none; white-space: normal; }
+}
+.inbox-sort-reset {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-left: 4px;
+  color: var(--brand-500);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.inbox-sort-reset:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; border-radius: 2px; }

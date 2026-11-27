@@ -1,0 +1,50 @@
+.deleg-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.deleg-candidate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+.deleg-candidate:hover { border-color: var(--brand-400); }
+.deleg-candidate.is-selected {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+  box-shadow: 0 0 0 1px var(--brand-500) inset;
+}
+.deleg-candidate:focus-within {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+.deleg-candidate input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.deleg-candidate-body { min-width: 0; flex: 1; }
+.deleg-candidate-name { display: block; font-weight: 700; color: var(--text); }
+.deleg-candidate-meta { display: block; font-size: 0.8125rem; color: var(--text-muted); }
+.deleg-check { color: var(--brand-500); flex-shrink: 0; }
+.deleg-summary {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+}
+.deleg-summary dt { color: var(--text-muted); font-size: 0.8125rem; }
+.deleg-summary dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.deleg-section-title { margin: 0; font-size: 1.125rem; }
