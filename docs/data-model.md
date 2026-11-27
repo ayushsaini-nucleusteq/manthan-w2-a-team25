@@ -63,11 +63,12 @@ Seed: 8 departments (use case).
 | manager_id | uuid | yes | FK → app_user; `CHECK (manager_id <> id)`; cycles rejected by the app |
 | bank_account_number | varchar(18) | yes | mock, `^\d{9,18}$` |
 | ifsc_code | char(11) | yes | mock, `^[A-Z]{4}0[A-Z0-9]{6}$` |
-| active | boolean | no | inactive users are hidden from the S1 picker and cannot sign in |
+| password_hash | varchar(100) | no | BCrypt hash; the plain password is never stored or logged |
+| active | boolean | no | inactive users cannot sign in (same 401 as a wrong password) |
 | version | integer | no | |
 | created_at, updated_at | timestamptz | no | |
 
-No password column: S1 signs in by picking a user, only when env var `DEMO_LOGIN_ENABLED=true` (default true in docker-compose, false otherwise). This is a known demo-only limitation. The JWT carries all of the user's roles; home screen = highest role. Indexes: `(manager_id)`, `(department_id)`, `(lower(full_name))` for the picker search.
+S1 signs in with email + password (BCrypt). Seeded users get `firstname.lastname@expenseflow.test` and one shared demo password from env `SEED_USER_PASSWORD` (set only in `.env`; see `docs/demo-accounts.md`). The JWT carries all of the user's roles; home screen = highest role. Indexes: `(manager_id)`, `(department_id)`; `email` is UNIQUE (citext, case-insensitive).
 Seed: 150 employees with a reporting hierarchy (use case).
 
 ### user_role
@@ -158,7 +159,7 @@ PK `(policy_version_id, city_key)`. Seed: Ahmedabad, Bengaluru, Chennai, Delhi, 
 | Column | Type | Null | Notes |
 |---|---|---|---|
 | id | uuid | no | PK; may be client-generated |
-| claim_number | varchar(20) | no | UNIQUE, `EXP-<yyyy>-<6 digits>` from a sequence |
+| claim_number | varchar(20) | no | UNIQUE, `CL-` + `claim_number_seq` zero-padded to 6 digits (`CL-000123`); searchable in every claim list (`q`) |
 | employee_id | uuid | no | FK → app_user (owner) |
 | department_id | uuid | no | FK → department; refreshed at each submit |
 | title | varchar(150) | no | |

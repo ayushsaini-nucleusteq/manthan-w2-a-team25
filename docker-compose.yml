@@ -27,6 +27,13 @@ services:
       DB_USERNAME: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      # HS256 signing key, >= 32 bytes. Empty = random per start (tokens stop working after a restart).
+      JWT_SECRET: ${JWT_SECRET:-}
+      # Shared password of the seeded demo users (see docs/demo-accounts.md); real value only in .env.
+      SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-}
+      RECEIPT_DIR: /data/receipts
+    volumes:
+      - receipts:/data/receipts
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     mem_limit: 1g
@@ -83,3 +90,4 @@ volumes:
   pgdata:
   promdata:
   grafanadata:
+  receipts:

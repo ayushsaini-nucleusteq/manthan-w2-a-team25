@@ -11,8 +11,9 @@ info:
     Tables and the claim state machine: `docs/data-model.md`.
 
     ## Conventions
-    - Base path `/api`. Everything except `GET /api/auth/users` and `POST /api/auth/login` needs
-      `Authorization: Bearer <JWT>`. Tokens last 8 hours; there is no refresh token (sign in again).
+    - Base path `/api`. Everything except `POST /api/auth/login` needs `Authorization: Bearer <JWT>`.
+      Tokens last 8 hours; there is no refresh token (sign in again). Sign-in is email + password
+      (BCrypt hashes); there is no public user list.
     - Roles: `EMPLOYEE`, `MANAGER`, `AUDITOR`, `FINANCE_HEAD` (also admin). Every user holds `EMPLOYEE`
       and can file claims. Allowed roles are in each operation's description and its `x-roles` field;
       `ANY` = any signed-in user.
@@ -28,7 +29,7 @@ info:
       ISO dates in Asia/Kolkata.
     - Lists are paginated: `page` (0-based), `size` (default 20, max 100), `sort` (`field,asc|desc`).
       Pages carry `items`, `page`, `size`, `totalItems`, `totalPages`. Small reference lists
-      (departments, categories, sign-in picker) are plain arrays.
+      (departments, categories) are plain arrays.
     - One error shape, `ApiError`, for every non-2xx response; `requestId` equals the `X-Request-Id` header.
     - Optimistic locking: state-changing requests on claims, users, policy and batches send the `version`
       they read; a stale one returns 409.
@@ -36,12 +37,13 @@ info:
       UUID `id`. The same `id` with the same content returns the existing record with 200 and changes
       nothing; the same `id` with different content returns 409.
     - The UI shows both 403 and 404 as "not found" (screen-list UI states).
+    - Claims carry a human-readable, unique `claimNumber`: `CL-` + a zero-padded sequence (`CL-000123`).
+      Every claim response returns it, and claim lists accept `q` to search it (and the title).
 
     ## Known limitations
-    - **Demo sign-in only.** S1 signs in by picking a user, with no password. `GET /api/auth/users` and
-      `POST /api/auth/login` work only when the env var `DEMO_LOGIN_ENABLED=true` (default `true` in
-      docker-compose, `false` everywhere else); when it is false both return 404. There is no other sign-in
-      method in this version, so the app must not run in a shared environment with demo sign-in on.
+    - **Logout is client-side.** `POST /api/auth/logout` records the event; the client discards the token,
+      which stays valid until it expires (no server-side revocation list in this version).
+    - **No sign-in throttling** yet: failed logins are audited but not rate-limited.
 servers:
   - url: http://localhost:8080
     description: Local backend
@@ -64,47 +66,18 @@ tags:
 
 paths:
   # ================================================================== Auth (S1)
-  /api/auth/users:
-    get:
-      tags: [Auth]
-      operationId: listSignInUsers
-      summary: Minimal list of active users for the sign-in picker
-      description: |
-        **Roles:** public; only when `DEMO_LOGIN_ENABLED=true` (404 otherwise, see Known limitations).
-        Active users only, sorted by name. Unpaginated (seeded demo users, ~150); `q` narrows it for a
-        type-ahead picker.
-      x-roles: [PUBLIC]
-      security: []
-      parameters:
-        - name: q
-          in: query
-          description: Case-insensitive match on name or department.
-          schema: { type: string, maxLength: 100 }
-      responses:
-        '404': { $ref: '#/components/responses/NotFound' }
-        '200':
-          description: Users
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/SignInUser' }
-              example:
-                - { id: 01935f2a-1c00-7000-8000-000000000104, fullName: Arjun Shah, department: { id: 01935f2a-1c00-7000-8000-000000000203, code: FIN, name: Finance }, roles: [EMPLOYEE, FINANCE_HEAD] }
-                - { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, roles: [EMPLOYEE] }
-                - { id: 01935f2a-1c00-7000-8000-000000000103, fullName: Meera Iyer, department: { id: 01935f2a-1c00-7000-8000-000000000203, code: FIN, name: Finance }, roles: [EMPLOYEE, AUDITOR] }
-                - { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, roles: [EMPLOYEE, MANAGER] }
-
   /api/auth/login:
     post:
       tags: [Auth]
       operationId: login
-      summary: Sign in as a picked user; returns an 8-hour JWT
+      summary: Sign in with email and password; returns an 8-hour JWT
       description: |
-        **Roles:** public; only when `DEMO_LOGIN_ENABLED=true` (404 otherwise). No password (demo sign-in).
-        "Role switch" on S1 = signing in again as a different user. The JWT carries **all** of the user's
-        roles; there is no active-role selection. Unknown or inactive `userId` returns 401.
-        Every successful sign-in writes a `LOGIN` audit event.
+        **Roles:** public. Email (case-insensitive) + password, checked against a BCrypt hash.
+        Unknown email, wrong password and inactive user all return **401** with the same message,
+        "Email or password is incorrect", so the response never reveals which accounts exist.
+        "Role switch" on S1 = signing out and in as a different user. The JWT carries **all** of the user's
+        roles; there is no active-role selection. Every success writes a `LOGIN` audit event and every
+        failure a `LOGIN_FAILED` event (attempted email in `details`, never the password).
       x-roles: [PUBLIC]
       security: []
       requestBody:
@@ -112,7 +85,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/LoginRequest' }
-            example: { userId: 01935f2a-1c00-7000-8000-000000000101 }
+            example: { email: asha.verma@expenseflow.test, password: "<password>" }
       responses:
         '200':
           description: Signed in
@@ -134,8 +107,25 @@ paths:
                   homeScreen: E1
                   delegationsReceived: []
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Wrong email or password (same message for both), or inactive user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+              example: { timestamp: "2026-11-27T09:00:00Z", status: 401, error: Unauthorized, message: Email or password is incorrect, path: /api/auth/login, requestId: 6f1c2a9e-4b7d-4c1e-9a55-2f0d8c3b7e16 }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Sign out (audited)
+      description: |
+        **Roles:** ANY. Writes a `LOGOUT` audit event and returns 204. The client discards the token;
+        the server does not revoke it (see Known limitations).
+      x-roles: [ANY]
+      responses:
+        '204': { description: Signed out }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
 
   /api/auth/me:
     get:
@@ -180,7 +170,7 @@ paths:
               schema: { $ref: '#/components/schemas/NotificationPage' }
               example:
                 items:
-                  - { id: 01935f2a-1c00-7000-8000-000000000901, type: APPROVAL_WAITING, title: Claim waiting for your approval, message: "EXP-2026-000123 from Asha Verma, 14050.00 INR", claimId: 01935f2a-1c00-7000-8000-000000000301, claimNumber: EXP-2026-000123, payoutBatchId: null, read: false, readAt: null, createdAt: "2026-11-20T09:15:02Z" }
+                  - { id: 01935f2a-1c00-7000-8000-000000000901, type: APPROVAL_WAITING, title: Claim waiting for your approval, message: "CL-000123 from Asha Verma, 14050.00 INR", claimId: 01935f2a-1c00-7000-8000-000000000301, claimNumber: CL-000123, payoutBatchId: null, read: false, readAt: null, createdAt: "2026-11-20T09:15:02Z" }
                 page: 0
                 size: 20
                 totalItems: 1
@@ -222,7 +212,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Notification' }
-              example: { id: 01935f2a-1c00-7000-8000-000000000901, type: APPROVAL_WAITING, title: Claim waiting for your approval, message: "EXP-2026-000123 from Asha Verma, 14050.00 INR", claimId: 01935f2a-1c00-7000-8000-000000000301, claimNumber: EXP-2026-000123, payoutBatchId: null, read: true, readAt: "2026-11-20T10:00:00Z", createdAt: "2026-11-20T09:15:02Z" }
+              example: { id: 01935f2a-1c00-7000-8000-000000000901, type: APPROVAL_WAITING, title: Claim waiting for your approval, message: "CL-000123 from Asha Verma, 14050.00 INR", claimId: 01935f2a-1c00-7000-8000-000000000301, claimNumber: CL-000123, payoutBatchId: null, read: true, readAt: "2026-11-20T10:00:00Z", createdAt: "2026-11-20T09:15:02Z" }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -604,10 +594,7 @@ paths:
           in: query
           description: "`scope=all` only."
           schema: { type: string, format: uuid }
-        - name: q
-          in: query
-          description: Match on claim number or title.
-          schema: { type: string, maxLength: 100 }
+        - $ref: '#/components/parameters/ClaimSearch'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -619,7 +606,7 @@ paths:
               schema: { $ref: '#/components/schemas/ClaimListPage' }
               example:
                 items:
-                  - { id: 01935f2a-1c00-7000-8000-000000000301, claimNumber: EXP-2026-000123, title: Client visit - Mumbai, status: PENDING_MANAGER, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-16", tripEndDate: "2026-11-18", currency: INR, totalAmount: "14050.00", lineCount: 2, policyOutcome: ROUTE, flags: [SOFT_LIMIT_EXCEEDED], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-20T09:15:02Z", decidedAt: null, updatedAt: "2026-11-20T09:15:02Z" }
+                  - { id: 01935f2a-1c00-7000-8000-000000000301, claimNumber: CL-000123, title: Client visit - Mumbai, status: PENDING_MANAGER, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-16", tripEndDate: "2026-11-18", currency: INR, totalAmount: "14050.00", lineCount: 2, policyOutcome: ROUTE, flags: [SOFT_LIMIT_EXCEEDED], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-20T09:15:02Z", decidedAt: null, updatedAt: "2026-11-20T09:15:02Z" }
                 page: 0
                 size: 20
                 totalItems: 1
@@ -927,7 +914,7 @@ paths:
                   findings:
                     - { ruleCode: LOCAL_CAB_TRIP, ruleName: Local cab per trip, reasonCode: SOFT_LIMIT_EXCEEDED, outcome: ROUTE, message: "Cab 2600.00 exceeds the 2000.00 per-trip limit by 600.00", limitType: SOFT, unit: PER_TRIP, limit: "2000.00", actual: "2600.00", excess: "600.00" }
                     - { ruleCode: WEEKEND, ruleName: Weekend spend, reasonCode: WEEKEND_EXPENSE, outcome: ROUTE, message: 2026-11-22 is a Sunday, limit: null, excess: null }
-                    - { ruleCode: DUPLICATE, ruleName: Duplicate vendor, amount and date, reasonCode: DUPLICATE, outcome: ROUTE, message: "Same vendor, amount and date as line 2 of EXP-2026-000118", limit: null, excess: null, matchedClaimId: 01935f2a-1c00-7000-8000-000000000298, matchedClaimNumber: EXP-2026-000118, matchedLineId: 01935f2a-1c00-7000-8000-000000000398, matchedLineNo: 2 }
+                    - { ruleCode: DUPLICATE, ruleName: "Duplicate vendor, amount and date", reasonCode: DUPLICATE, outcome: ROUTE, message: "Same vendor, amount and date as line 2 of CL-000118", limit: null, excess: null, matchedClaimId: 01935f2a-1c00-7000-8000-000000000298, matchedClaimNumber: CL-000118, matchedLineId: 01935f2a-1c00-7000-8000-000000000398, matchedLineNo: 2 }
                   submitBlockers:
                     - { lineId: null, lineNo: null, field: receipt, code: RECEIPT_REQUIRED, message: "Receipt required for amounts above 500.00" }
                 claim:
@@ -1073,6 +1060,18 @@ paths:
         - name: stepType
           in: query
           schema: { $ref: '#/components/schemas/StepType' }
+        - name: departmentId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: minAmount
+          in: query
+          description: Claim total at least this amount (inclusive).
+          schema: { $ref: '#/components/schemas/Money' }
+        - name: maxAmount
+          in: query
+          description: Claim total at most this amount (inclusive). 400 if below `minAmount`.
+          schema: { $ref: '#/components/schemas/Money' }
+        - $ref: '#/components/parameters/ClaimSearch'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
       responses:
@@ -1137,7 +1136,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RejectRequest' }
-            example: { version: 5, reason: Personal travel, not reimbursable }
+            example: { version: 5, reason: "Personal travel, not reimbursable" }
       responses:
         '200':
           description: Updated claim
@@ -1228,6 +1227,7 @@ paths:
         - name: amountBand
           in: query
           schema: { $ref: '#/components/schemas/AmountBand' }
+        - $ref: '#/components/parameters/ClaimSearch'
         - name: departmentId
           in: query
           schema: { type: string, format: uuid }
@@ -1335,6 +1335,7 @@ paths:
         - name: departmentId
           in: query
           schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ClaimSearch'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -1346,7 +1347,7 @@ paths:
               schema: { $ref: '#/components/schemas/ClaimSummaryPage' }
               example:
                 items:
-                  - { id: 01935f2a-1c00-7000-8000-000000000305, claimNumber: EXP-2026-000135, title: Team lunch, status: AUTO_APPROVED, employee: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: null, tripEndDate: null, currency: INR, totalAmount: "1320.00", lineCount: 1, policyOutcome: AUTO_APPROVE, flags: [], sampleAudit: true, sampleAuditStatus: PENDING, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-24T08:00:00Z", decidedAt: "2026-11-24T08:00:00Z", updatedAt: "2026-11-24T08:00:00Z" }
+                  - { id: 01935f2a-1c00-7000-8000-000000000305, claimNumber: CL-000135, title: Team lunch, status: AUTO_APPROVED, employee: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: null, tripEndDate: null, currency: INR, totalAmount: "1320.00", lineCount: 1, policyOutcome: AUTO_APPROVE, flags: [], sampleAudit: true, sampleAuditStatus: PENDING, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-24T08:00:00Z", decidedAt: "2026-11-24T08:00:00Z", updatedAt: "2026-11-24T08:00:00Z" }
                 page: 0
                 size: 20
                 totalItems: 1
@@ -1463,6 +1464,7 @@ paths:
         - name: departmentId
           in: query
           schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ClaimSearch'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -1474,7 +1476,7 @@ paths:
               schema: { $ref: '#/components/schemas/ClaimSummaryPage' }
               example:
                 items:
-                  - { id: 01935f2a-1c00-7000-8000-000000000304, claimNumber: EXP-2026-000140, title: Pune client visit, status: AUTO_APPROVED, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-23", tripEndDate: "2026-11-24", currency: INR, totalAmount: "6200.00", lineCount: 3, policyOutcome: AUTO_APPROVE, flags: [], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-24T10:00:00Z", decidedAt: "2026-11-24T10:00:00Z", updatedAt: "2026-11-24T10:00:00Z" }
+                  - { id: 01935f2a-1c00-7000-8000-000000000304, claimNumber: CL-000140, title: Pune client visit, status: AUTO_APPROVED, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-23", tripEndDate: "2026-11-24", currency: INR, totalAmount: "6200.00", lineCount: 3, policyOutcome: AUTO_APPROVE, flags: [], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-24T10:00:00Z", decidedAt: "2026-11-24T10:00:00Z", updatedAt: "2026-11-24T10:00:00Z" }
                 page: 0
                 size: 20
                 totalItems: 1
@@ -1589,7 +1591,7 @@ paths:
               schema: { type: string }
               example: |
                 batch_number,claim_number,employee_code,employee_name,bank_account_number,ifsc_code,amount,currency,narration
-                PAY-2026-0007,EXP-2026-000140,E1001,Asha Verma,000111222333,HDFC0001234,6200.00,INR,EXP-2026-000140 reimbursement
+                PAY-2026-0007,CL-000140,E1001,Asha Verma,000111222333,HDFC0001234,6200.00,INR,CL-000140 reimbursement
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1631,7 +1633,7 @@ paths:
                 bankReference: UTR2026112700042
                 version: 2
                 items:
-                  - { claimId: 01935f2a-1c00-7000-8000-000000000304, claimNumber: EXP-2026-000140, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, employeeCode: E1001, amount: "6200.00", bankAccountNumber: "000111222333", ifscCode: HDFC0001234 }
+                  - { claimId: 01935f2a-1c00-7000-8000-000000000304, claimNumber: CL-000140, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, employeeCode: E1001, amount: "6200.00", bankAccountNumber: "000111222333", ifscCode: HDFC0001234 }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1704,7 +1706,7 @@ paths:
                   - { stepType: AUDITOR, pending: 4, overdue: 0 }
                   - { stepType: FINANCE_HEAD, pending: 1, overdue: 1 }
                   - { stepType: SAMPLE_AUDIT, pending: 3, overdue: 0 }
-                oldestPending: { claimId: 01935f2a-1c00-7000-8000-000000000306, claimNumber: EXP-2026-000101, stepType: FINANCE_HEAD, pendingSince: "2026-11-21T04:00:00Z", ageHours: 150.5 }
+                oldestPending: { claimId: 01935f2a-1c00-7000-8000-000000000306, claimNumber: CL-000101, stepType: FINANCE_HEAD, pendingSince: "2026-11-21T04:00:00Z", ageHours: 150.5 }
                 approvalAgeAlert: { thresholdHours: 48, breached: true, breachedSince: "2026-11-23T04:00:00Z" }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -1766,6 +1768,12 @@ components:
       description: "From `POST /api/auth/login`; valid 8 hours. Claims: `sub` (user id), `roles`, `exp`. Roles and the active flag are re-read from the database on each request."
 
   parameters:
+    ClaimSearch:
+      name: q
+      in: query
+      description: Case-insensitive search on claim number (e.g. `CL-000123` or `000123`) and title.
+      schema: { type: string, maxLength: 100 }
+      example: CL-000123
     Page:
       name: page
       in: query
@@ -1941,6 +1949,8 @@ components:
       type: string
       enum:
         - LOGIN
+        - LOGIN_FAILED
+        - LOGOUT
         - CLAIM_CREATED
         - CLAIM_UPDATED
         - CLAIM_DELETED
@@ -1971,19 +1981,12 @@ components:
         - USER_UPDATED
 
     # ---------- auth & users
-    SignInUser:
-      type: object
-      required: [id, fullName, department, roles]
-      properties:
-        id: { type: string, format: uuid }
-        fullName: { type: string }
-        department: { $ref: '#/components/schemas/Department' }
-        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
     LoginRequest:
       type: object
-      required: [userId]
+      required: [email, password]
       properties:
-        userId: { type: string, format: uuid }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
     LoginResponse:
       type: object
       required: [accessToken, tokenType, expiresIn, user]
@@ -2220,8 +2223,8 @@ components:
         expenseDate: { type: string, format: date, description: Not in the future }
         vendor: { type: string, minLength: 1, maxLength: 150 }
         notes: { type: [string, 'null'], maxLength: 500 }
-        city: { type: [string, 'null'], maxLength: 80, description: Required for HOTEL, absent otherwise }
-        nights: { type: [integer, 'null'], minimum: 1, maximum: 60, description: Required for HOTEL, absent otherwise }
+        city: { type: [string, 'null'], maxLength: 80, description: "Required for HOTEL, absent otherwise" }
+        nights: { type: [integer, 'null'], minimum: 1, maximum: 60, description: "Required for HOTEL, absent otherwise" }
     Receipt:
       type: object
       required: [id, fileName, contentType, sizeBytes, sha256, uploadedAt]
@@ -2250,8 +2253,8 @@ components:
         message: { type: string }
         limitType: { type: string, enum: [SOFT, HARD], description: Which limit `limit` is }
         unit: { type: string, enum: [PER_DAY, PER_NIGHT, PER_TRIP, PER_CLAIM] }
-        limit: { $ref: '#/components/schemas/NullableMoney', description: The limit applied, in `unit` }
-        actual: { $ref: '#/components/schemas/NullableMoney', description: Value compared, in `unit` }
+        limit: { $ref: '#/components/schemas/NullableMoney', description: "The limit applied, in `unit`" }
+        actual: { $ref: '#/components/schemas/NullableMoney', description: "Value compared, in `unit`" }
         excess: { $ref: '#/components/schemas/NullableMoney', description: "actual - limit; 0.00 when within" }
         matchedClaimId: { type: [string, 'null'], format: uuid }
         matchedClaimNumber: { type: [string, 'null'] }
@@ -2335,7 +2338,7 @@ components:
         findings: { type: array, items: { $ref: '#/components/schemas/PolicyFinding' } }
     ApprovalStep:
       type: object
-      required: [id, sequence, stepType, assignee, status, pendingSince, overdue, actedBy, onBehalfOf, actedAt, comment]
+      required: [id, sequence, stepType, assignee, status, pendingSince, overdue, approverName, onBehalfOfName, decidedAt, actedBy, onBehalfOf, actedAt, comment]
       properties:
         id: { type: string, format: uuid }
         sequence: { type: integer, minimum: 1 }
@@ -2346,6 +2349,11 @@ components:
         status: { $ref: '#/components/schemas/StepStatus' }
         pendingSince: { type: [string, 'null'], format: date-time }
         overdue: { type: boolean }
+        approverName:
+          type: [string, 'null']
+          description: Who decided the step; while undecided, the named assignee (null for a role pool).
+        onBehalfOfName: { type: [string, 'null'], description: Delegator's name when a delegate decided }
+        decidedAt: { type: [string, 'null'], format: date-time, description: "When the step was approved, rejected or sent back" }
         actedBy: { oneOf: [ { $ref: '#/components/schemas/UserRef' }, { type: 'null' } ] }
         onBehalfOf: { oneOf: [ { $ref: '#/components/schemas/UserRef' }, { type: 'null' } ] }
         actedAt: { type: [string, 'null'], format: date-time }
@@ -2355,7 +2363,7 @@ components:
       required: [id, claimNumber, title, status, employee, department, tripStartDate, tripEndDate, currency, totalAmount, lineCount, policyOutcome, flags, sampleAudit, sampleAuditStatus, sampleAuditedBy, sampleAuditedAt, submittedAt, decidedAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
-        claimNumber: { type: string, examples: [EXP-2026-000123] }
+        claimNumber: { type: string, pattern: '^CL-\d{6,}$', description: "Unique, human-readable: CL- + zero-padded sequence", examples: [CL-000123] }
         title: { type: string }
         status: { $ref: '#/components/schemas/ClaimStatus' }
         employee: { $ref: '#/components/schemas/UserRef' }
@@ -2375,7 +2383,7 @@ components:
         sampleAuditedBy: { oneOf: [ { $ref: '#/components/schemas/UserRef' }, { type: 'null' } ], description: Auditor who recorded the sample-audit result }
         sampleAuditedAt: { type: [string, 'null'], format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time, description: Latest submission }
-        decidedAt: { type: [string, 'null'], format: date-time, description: When it reached APPROVED, AUTO_APPROVED, REJECTED or AUTO_REJECTED }
+        decidedAt: { type: [string, 'null'], format: date-time, description: "When it reached APPROVED, AUTO_APPROVED, REJECTED or AUTO_REJECTED" }
         updatedAt: { type: string, format: date-time }
     ClaimDetail:
       allOf:
@@ -2395,7 +2403,7 @@ components:
               description: Every comment, send-back comment, reject reason and employee reply, oldest first (US4-AC1).
               items: { $ref: '#/components/schemas/ClaimComment' }
             decisionReason: { type: [string, 'null'], description: Set for REJECTED (approver's reason) and AUTO_REJECTED (summary of findings) }
-            editable: { type: boolean, description: Owner may edit (DRAFT, SENT_BACK) }
+            editable: { type: boolean, description: "Owner may edit (DRAFT, SENT_BACK)" }
             lines: { type: array, items: { $ref: '#/components/schemas/ExpenseLine' } }
             latestEvaluation: { oneOf: [ { $ref: '#/components/schemas/PolicyEvaluation' }, { type: 'null' } ] }
             approvalSteps: { type: array, items: { $ref: '#/components/schemas/ApprovalStep' } }
@@ -2553,7 +2561,7 @@ components:
         batchNumber: { type: string, examples: [PAY-2026-0007] }
         status: { $ref: '#/components/schemas/PayoutStatus' }
         claimCount: { type: integer }
-        totalAmount: { type: string, pattern: '^\d{1,12}\.\d{2}$', description: NUMERIC(14,2) }
+        totalAmount: { type: string, pattern: '^\d{1,12}\.\d{2}$', description: "NUMERIC(14,2)" }
         createdBy: { $ref: '#/components/schemas/UserRef' }
         createdAt: { type: string, format: date-time }
         exportedAt: { type: [string, 'null'], format: date-time }
@@ -2748,7 +2756,7 @@ components:
     ClaimDraft:
       value:
         id: 01935f2a-1c00-7000-8000-000000000301
-        claimNumber: EXP-2026-000123
+        claimNumber: CL-000123
         title: Client visit - Mumbai
         status: DRAFT
         employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }
@@ -2787,7 +2795,7 @@ components:
       summary: Hotel over the tier-1 soft cap; routed to the manager
       value:
         id: 01935f2a-1c00-7000-8000-000000000301
-        claimNumber: EXP-2026-000123
+        claimNumber: CL-000123
         title: Client visit - Mumbai
         status: PENDING_MANAGER
         employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }
@@ -2851,7 +2859,7 @@ components:
             - { lineId: 01935f2a-1c00-7000-8000-000000000401, policyVersionNo: 1, outcome: ROUTE, findings: [ { ruleCode: HOTEL_NIGHTLY_TIER1, ruleName: Hotel per night (tier-1 city), reasonCode: SOFT_LIMIT_EXCEEDED, outcome: ROUTE, message: "6600.00/night in Mumbai exceeds the 6000.00 tier-1 limit by 600.00/night", limitType: SOFT, unit: PER_NIGHT, limit: "6000.00", actual: "6600.00", excess: "600.00" } ] }
             - { lineId: 01935f2a-1c00-7000-8000-000000000402, policyVersionNo: 1, outcome: AUTO_APPROVE, findings: [ { ruleCode: MEALS_DAILY, ruleName: Meals per day, reasonCode: WITHIN_LIMIT, outcome: AUTO_APPROVE, message: "Meals 850.00 on 2026-11-17 within the 1500.00 daily limit", limitType: SOFT, unit: PER_DAY, limit: "1500.00", actual: "850.00", excess: "0.00" } ] }
         approvalSteps:
-          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: PENDING, pendingSince: "2026-11-20T09:15:02Z", overdue: false, actedBy: null, onBehalfOf: null, actedAt: null, comment: null }
+          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: PENDING, pendingSince: "2026-11-20T09:15:02Z", overdue: false, approverName: Ravi Kumar, onBehalfOfName: null, decidedAt: null, actedBy: null, onBehalfOf: null, actedAt: null, comment: null }
         statusHistory:
           - { fromStatus: null, toStatus: DRAFT, at: "2026-11-19T11:40:00Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
           - { fromStatus: DRAFT, toStatus: SUBMITTED, at: "2026-11-20T09:15:02Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
@@ -2863,7 +2871,7 @@ components:
     ClaimSentBack:
       value:
         id: 01935f2a-1c00-7000-8000-000000000301
-        claimNumber: EXP-2026-000123
+        claimNumber: CL-000123
         title: Client visit - Mumbai
         status: SENT_BACK
         employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }
@@ -2890,7 +2898,7 @@ components:
         lines: []
         latestEvaluation: null
         approvalSteps:
-          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: SENT_BACK, pendingSince: null, overdue: false, actedBy: { id: 01935f2a-1c00-7000-8000-000000000106, fullName: Kiran Rao }, onBehalfOf: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, actedAt: "2026-11-21T05:02:40Z", comment: Please attach the itemised hotel bill }
+          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: SENT_BACK, pendingSince: null, overdue: false, approverName: Kiran Rao, onBehalfOfName: Ravi Kumar, decidedAt: "2026-11-21T05:02:40Z", actedBy: { id: 01935f2a-1c00-7000-8000-000000000106, fullName: Kiran Rao }, onBehalfOf: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, actedAt: "2026-11-21T05:02:40Z", comment: Please attach the itemised hotel bill }
         statusHistory:
           - { fromStatus: null, toStatus: DRAFT, at: "2026-11-19T11:40:00Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
           - { fromStatus: DRAFT, toStatus: SUBMITTED, at: "2026-11-20T09:15:02Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
@@ -2904,7 +2912,7 @@ components:
     ClaimApproved:
       value:
         id: 01935f2a-1c00-7000-8000-000000000301
-        claimNumber: EXP-2026-000123
+        claimNumber: CL-000123
         title: Client visit - Mumbai
         status: APPROVED
         employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }
@@ -2931,7 +2939,7 @@ components:
         lines: []
         latestEvaluation: null
         approvalSteps:
-          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: APPROVED, pendingSince: null, overdue: false, actedBy: { id: 01935f2a-1c00-7000-8000-000000000106, fullName: Kiran Rao }, onBehalfOf: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, actedAt: "2026-11-21T11:30:00Z", comment: Rate OK for that week }
+          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: APPROVED, pendingSince: null, overdue: false, approverName: Kiran Rao, onBehalfOfName: Ravi Kumar, decidedAt: "2026-11-21T11:30:00Z", actedBy: { id: 01935f2a-1c00-7000-8000-000000000106, fullName: Kiran Rao }, onBehalfOf: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, actedAt: "2026-11-21T11:30:00Z", comment: Rate OK for that week }
         statusHistory:
           - { fromStatus: null, toStatus: DRAFT, at: "2026-11-19T11:40:00Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
           - { fromStatus: DRAFT, toStatus: SUBMITTED, at: "2026-11-20T09:15:02Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
@@ -2950,7 +2958,7 @@ components:
     ClaimRejected:
       value:
         id: 01935f2a-1c00-7000-8000-000000000301
-        claimNumber: EXP-2026-000123
+        claimNumber: CL-000123
         title: Client visit - Mumbai
         status: REJECTED
         employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }
@@ -2977,7 +2985,7 @@ components:
         lines: []
         latestEvaluation: null
         approvalSteps:
-          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: REJECTED, pendingSince: null, overdue: false, actedBy: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, onBehalfOf: null, actedAt: "2026-11-21T05:02:40Z", comment: Personal travel, not reimbursable }
+          - { id: 01935f2a-1c00-7000-8000-000000000601, sequence: 1, stepType: MANAGER, assignee: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, status: REJECTED, pendingSince: null, overdue: false, approverName: Ravi Kumar, onBehalfOfName: null, decidedAt: "2026-11-21T05:02:40Z", actedBy: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }, onBehalfOf: null, actedAt: "2026-11-21T05:02:40Z", comment: "Personal travel, not reimbursable" }
         statusHistory:
           - { fromStatus: null, toStatus: DRAFT, at: "2026-11-19T11:40:00Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
           - { fromStatus: DRAFT, toStatus: SUBMITTED, at: "2026-11-20T09:15:02Z", actor: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, onBehalfOf: null }
@@ -2992,7 +3000,7 @@ components:
       summary: Cab over the hard limit; final
       value:
         id: 01935f2a-1c00-7000-8000-000000000307
-        claimNumber: EXP-2026-000150
+        claimNumber: CL-000150
         title: Airport transfers
         status: AUTO_REJECTED
         employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }
@@ -3044,7 +3052,7 @@ components:
     ClaimSampleCleared:
       value:
         id: 01935f2a-1c00-7000-8000-000000000305
-        claimNumber: EXP-2026-000135
+        claimNumber: CL-000135
         title: Team lunch
         status: AUTO_APPROVED
         employee: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }
@@ -3071,7 +3079,7 @@ components:
         lines: []
         latestEvaluation: null
         approvalSteps:
-          - { id: 01935f2a-1c00-7000-8000-000000000610, sequence: 1, stepType: SAMPLE_AUDIT, assignee: null, status: APPROVED, pendingSince: null, overdue: false, actedBy: { id: 01935f2a-1c00-7000-8000-000000000103, fullName: Meera Iyer }, onBehalfOf: null, actedAt: "2026-11-25T10:00:00Z", comment: Receipt matches }
+          - { id: 01935f2a-1c00-7000-8000-000000000610, sequence: 1, stepType: SAMPLE_AUDIT, assignee: null, status: APPROVED, pendingSince: null, overdue: false, approverName: Meera Iyer, onBehalfOfName: null, decidedAt: "2026-11-25T10:00:00Z", actedBy: { id: 01935f2a-1c00-7000-8000-000000000103, fullName: Meera Iyer }, onBehalfOf: null, actedAt: "2026-11-25T10:00:00Z", comment: Receipt matches }
         statusHistory:
           - { fromStatus: null, toStatus: DRAFT, at: "2026-11-24T07:50:00Z", actor: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }, onBehalfOf: null }
           - { fromStatus: DRAFT, toStatus: SUBMITTED, at: "2026-11-24T08:00:00Z", actor: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }, onBehalfOf: null }
@@ -3094,7 +3102,7 @@ components:
             delegated: true
             onBehalfOf: { id: 01935f2a-1c00-7000-8000-000000000102, fullName: Ravi Kumar }
             myAction: null
-            claim: { id: 01935f2a-1c00-7000-8000-000000000301, claimNumber: EXP-2026-000123, title: Client visit - Mumbai, status: PENDING_MANAGER, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-16", tripEndDate: "2026-11-18", currency: INR, totalAmount: "14050.00", lineCount: 2, policyOutcome: ROUTE, flags: [SOFT_LIMIT_EXCEEDED], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-20T09:15:02Z", decidedAt: null, updatedAt: "2026-11-20T09:15:02Z" }
+            claim: { id: 01935f2a-1c00-7000-8000-000000000301, claimNumber: CL-000123, title: Client visit - Mumbai, status: PENDING_MANAGER, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-16", tripEndDate: "2026-11-18", currency: INR, totalAmount: "14050.00", lineCount: 2, policyOutcome: ROUTE, flags: [SOFT_LIMIT_EXCEEDED], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-20T09:15:02Z", decidedAt: null, updatedAt: "2026-11-20T09:15:02Z" }
         page: 0
         size: 20
         totalItems: 1
@@ -3111,7 +3119,7 @@ components:
             delegated: false
             onBehalfOf: null
             myAction: null
-            claim: { id: 01935f2a-1c00-7000-8000-000000000302, claimNumber: EXP-2026-000131, title: Bengaluru offsite, status: PENDING_AUDITOR, employee: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-19", tripEndDate: "2026-11-21", currency: INR, totalAmount: "38400.00", lineCount: 6, policyOutcome: ROUTE, flags: [WEEKEND_EXPENSE], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-22T04:10:00Z", decidedAt: null, updatedAt: "2026-11-23T06:00:00Z" }
+            claim: { id: 01935f2a-1c00-7000-8000-000000000302, claimNumber: CL-000131, title: Bengaluru offsite, status: PENDING_AUDITOR, employee: { id: 01935f2a-1c00-7000-8000-000000000105, fullName: Neha Singh }, department: { id: 01935f2a-1c00-7000-8000-000000000201, code: ENG, name: Engineering }, tripStartDate: "2026-11-19", tripEndDate: "2026-11-21", currency: INR, totalAmount: "38400.00", lineCount: 6, policyOutcome: ROUTE, flags: [WEEKEND_EXPENSE], sampleAudit: false, sampleAuditStatus: null, sampleAuditedBy: null, sampleAuditedAt: null, submittedAt: "2026-11-22T04:10:00Z", decidedAt: null, updatedAt: "2026-11-23T06:00:00Z" }
         page: 0
         size: 20
         totalItems: 1
@@ -3130,4 +3138,4 @@ components:
         bankReference: null
         version: 0
         items:
-          - { claimId: 01935f2a-1c00-7000-8000-000000000304, claimNumber: EXP-2026-000140, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, employeeCode: E1001, amount: "6200.00", bankAccountNumber: "000111222333", ifscCode: HDFC0001234 }
+          - { claimId: 01935f2a-1c00-7000-8000-000000000304, claimNumber: CL-000140, employee: { id: 01935f2a-1c00-7000-8000-000000000101, fullName: Asha Verma }, employeeCode: E1001, amount: "6200.00", bankAccountNumber: "000111222333", ifscCode: HDFC0001234 }
