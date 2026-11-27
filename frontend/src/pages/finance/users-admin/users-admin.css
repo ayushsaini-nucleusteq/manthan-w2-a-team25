@@ -1,0 +1,10 @@
+/* F5 Users */
+.ua-roles { display: flex; flex-wrap: wrap; gap: 4px; }
+.ua-manager-pick { display: grid; gap: 8px; }
+.ua-section-title { margin: 0; font-size: 1.125rem; color: var(--brand-900); }
+.ua-section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.ua-role-grid { display: grid; gap: 8px; grid-template-columns: 1fr; }
+@media (min-width: 600px) { .ua-role-grid { grid-template-columns: 1fr 1fr; } }
+.ua-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ua-fieldset legend { padding: 0; margin-bottom: 8px; font-weight: 600; font-size: 0.875rem; }
+.ua-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

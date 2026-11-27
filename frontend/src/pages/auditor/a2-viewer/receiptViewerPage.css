@@ -1,0 +1,114 @@
+/* A2 Audit claim: side-by-side lines + receipt workspace. */
+.a2-page .page-body { padding-bottom: 96px; }
+
+.a2-split {
+  display: grid;
+  grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+  gap: 20px;
+  align-items: start;
+}
+.a2-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.a2-right {
+  position: sticky;
+  top: calc(var(--nav-h, 64px) + var(--subnav-h, 0px) + 12px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.a2-right .card { padding: 12px; }
+
+.a2-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+.a2-summary dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; }
+.a2-summary dd { margin: 2px 0 0; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+
+.a2-chain { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.a2-chain li {
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 12px; background: var(--surface-2); min-width: 150px; flex: 1 1 150px;
+}
+.a2-chain li.is-current { border-color: var(--brand-500); background: var(--brand-50); }
+.a2-chain-type { font-weight: 700; color: var(--brand-900); font-size: 0.875rem; }
+.a2-chain-who { font-size: 0.8125rem; color: var(--text-muted); }
+
+.a2-lines { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.a2-lines th, .a2-lines td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.a2-lines th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); background: var(--surface-2); }
+.a2-lines .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.a2-lines tbody tr { cursor: pointer; transition: background var(--t-fast, 0.12s); }
+.a2-lines tbody tr:hover { background: var(--brand-50); }
+.a2-lines tbody tr.is-selected { background: var(--brand-50); box-shadow: inset 3px 0 0 var(--brand-500); }
+.a2-lines tfoot td { font-weight: 700; border-bottom: 0; }
+.a2-line-btn {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--brand-700);
+  font-weight: 600; cursor: pointer; text-align: left;
+}
+.a2-line-btn:hover { text-decoration: underline; }
+.a2-line-meta { display: block; color: var(--text-muted); font-size: 0.8125rem; }
+.a2-findings { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.a2-findings li { font-size: 0.8125rem; color: var(--text-muted); display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+.a2-noreceipt { color: var(--warning); font-size: 0.8125rem; font-weight: 600; }
+
+.a2-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; }
+.a2-thumb {
+  flex: 0 0 auto; width: 64px; height: 80px; border-radius: var(--radius-sm);
+  border: 2px solid var(--border); background: var(--surface-2); padding: 0; cursor: pointer;
+  overflow: hidden; position: relative; display: grid; place-items: center; color: var(--text-muted);
+}
+.a2-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.a2-thumb.is-active { border-color: var(--brand-500); box-shadow: 0 0 0 2px var(--brand-100); }
+.a2-thumb-no {
+  position: absolute; left: 2px; top: 2px; background: var(--brand-900); color: var(--text-inverse);
+  font-size: 0.6875rem; font-weight: 700; border-radius: 4px; padding: 0 4px;
+}
+.a2-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.a2-pager-label { font-weight: 600; font-size: 0.875rem; }
+.a2-receipt-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.8125rem; color: var(--text-muted); }
+.a2-receipt-meta code { font-family: var(--mono); }
+
+.a2-viewtoggle {
+  display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  padding: 3px; background: var(--surface); margin-bottom: 12px; width: 100%;
+}
+.a2-viewtoggle button {
+  flex: 1 1 0; min-height: 40px; border: 0; background: none; border-radius: var(--radius-pill);
+  font: inherit; font-weight: 600; color: var(--text-muted); cursor: pointer;
+}
+.a2-viewtoggle button[aria-pressed='true'] { background: var(--brand-500); color: var(--text-inverse); }
+
+.a2-decisionbar {
+  position: sticky; bottom: 0; z-index: var(--z-sticky, 20);
+  background: var(--surface); border-top: 1px solid var(--border); box-shadow: var(--shadow-2);
+  margin-top: 20px; padding: 12px 16px; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.a2-decisionbar-info { flex: 1 1 220px; min-width: 0; font-size: 0.875rem; color: var(--text-muted); }
+.a2-decisionbar-info strong { color: var(--text); }
+.a2-decisionbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.a2-nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.a2-nav-pos { font-size: 0.875rem; color: var(--text-muted); }
+
+.a2-kbd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.a2-kbd-list li { display: flex; justify-content: space-between; gap: 12px; }
+.a2-kbd {
+  font-family: var(--mono); font-size: 0.8125rem; border: 1px solid var(--border-strong);
+  border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; background: var(--surface-2);
+}
+
+@media (max-width: 899.98px) {
+  .a2-split { grid-template-columns: minmax(0, 1fr); }
+  .a2-right { position: static; }
+}
+@media (max-width: 719.98px) {
+  .a2-lines .hide-sm { display: none; }
+  .a2-decisionbar { margin-left: calc(-1 * var(--gutter, 16px)); margin-right: calc(-1 * var(--gutter, 16px)); border-radius: 0; }
+  .a2-decisionbar-actions { width: 100%; }
+  .a2-decisionbar-actions .btn { flex: 1 1 0; min-height: 44px; }
+}
