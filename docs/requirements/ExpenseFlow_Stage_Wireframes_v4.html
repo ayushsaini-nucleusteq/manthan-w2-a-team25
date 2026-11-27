@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ExpenseFlow stage wireframes by role (with role switch)</title>
+<style>
+  body { font-family: Arial, sans-serif; color: #222; margin: 24px; background: #fff; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  p.note { font-size: 13px; color: #555; margin: 4px 0 12px; }
+  p.flow { font-size: 13px; color: #444; margin-bottom: 6px; }
+  .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .screen { border: 1px solid #999; border-radius: 6px; overflow: hidden; }
+  .screen .cap { background: #eee; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid #999; }
+  .screen .cap b { font-size: 13px; }
+  .topbar { background: #ddd; min-height: 34px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 4px 10px; font-size: 12px; color: #333; border-bottom: 1px solid #aaa; }
+  .topbar .who { font-weight: bold; }
+  .topbar .nav span { margin-right: 10px; }
+  .switch { display: inline-flex; border: 1px solid #666; border-radius: 3px; overflow: hidden; font-size: 11px; }
+  .switch span { padding: 3px 8px; }
+  .switch span.on { background: #444; color: #fff; }
+  .body { padding: 10px; font-size: 12px; }
+  .box { border: 1px dashed #888; border-radius: 3px; padding: 6px; margin-bottom: 8px; color: #444; }
+  .field { border: 1px solid #888; border-radius: 3px; height: 26px; margin-bottom: 8px; background: #fafafa; font-size: 11px; color: #777; padding: 5px 6px; box-sizing: border-box; }
+  .row { display: flex; justify-content: space-between; border-bottom: 1px solid #ddd; padding: 5px 0; }
+  .btn { display: inline-block; border: 1px solid #666; border-radius: 3px; padding: 3px 8px; margin-right: 6px; font-size: 12px; }
+  .btn.p { background: #444; color: #fff; }
+  .tag { font-size: 11px; border: 1px solid #888; border-radius: 3px; padding: 1px 5px; }
+  .err { color: #a00; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td, th { border-bottom: 1px solid #ddd; text-align: left; padding: 4px; }
+</style>
+</head>
+<body>
+
+<h1>ExpenseFlow stage wireframes by role</h1>
+<p class="note">Login is by credentials only, and the screen does not show who is signing in. The account's role decides which screens open. A person who holds more than one role (for example, a line manager who also files claims) sees a role switch in the top bar. The switch changes the screens shown, not the account. Amounts are in INR.</p>
+
+<h2>Login and logout (all roles)</h2>
+<div class="stages">
+  <div class="screen">
+    <div class="cap"><b>Login</b> · credentials only</div>
+    <div class="topbar"><span class="who">ExpenseFlow</span><span class="nav"><span>Not signed in</span></span></div>
+    <div class="body">
+      <div class="field">Work email</div>
+      <div class="field">Password</div>
+      <span class="btn p">Log in</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>Login</b> · wrong details</div>
+    <div class="topbar"><span class="who">ExpenseFlow</span><span class="nav"><span>Not signed in</span></span></div>
+    <div class="body">
+      <div class="field">Work email</div>
+      <div class="field">Password</div>
+      <span class="btn p">Log in</span>
+      <p class="err">Email or password is incorrect.</p>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>Log out</b> · confirmation</div>
+    <div class="topbar"><span class="who">Signed in: [user]</span><span class="btn">Log out</span></div>
+    <div class="body">
+      <div class="box">Log out of ExpenseFlow? Unsaved drafts will be lost.</div>
+      <span class="btn p">Log out</span><span class="btn">Cancel</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>Logged out</b> · after log out</div>
+    <div class="topbar"><span class="who">ExpenseFlow</span><span class="nav"><span>Not signed in</span></span></div>
+    <div class="body">
+      <div class="box">You have been logged out.</div>
+      <span class="btn p">Log in again</span>
+    </div>
+  </div>
+</div>
+
+<h2>Role switch (for accounts with more than one role)</h2>
+<p class="flow">The switch appears only when the account holds more than one role. For a person with one role, the top bar shows just their name and role. The switch shows the role names the account holds, and the current one is highlighted.</p>
+<div class="stages">
+  <div class="screen">
+    <div class="cap"><b>Single role</b> · employee only, no switch</div>
+    <div class="topbar"><span class="who">Signed in: [employee]</span><span class="btn">Log out</span></div>
+    <div class="body">
+      <div class="box">Employee screens only.</div>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>Two roles</b> · line manager who also files claims</div>
+    <div class="topbar"><span class="who">Signed in: [line manager]</span><span class="switch"><span class="on">Manager</span><span>Employee</span></span><span class="btn">Log out</span></div>
+    <div class="body">
+      <p class="note">Manager is selected. The screens below are the manager's queue and decisions.</p>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>Two roles</b> · switched to Employee</div>
+    <div class="topbar"><span class="who">Signed in: [line manager]</span><span class="switch"><span>Manager</span><span class="on">Employee</span></span><span class="btn">Log out</span></div>
+    <div class="body">
+      <p class="note">Employee is selected. The screens below are that person's own claims. Approval screens are hidden.</p>
+    </div>
+  </div>
+</div>
+
+<h2>Employee</h2>
+<p class="flow">Stage 1: Draft and submit · Stage 2: Waiting for approval · Stage 3: Sent back · Stage 4: Approved</p>
+<div class="stages">
+  <div class="screen">
+    <div class="cap"><b>1. New claim</b> · draft</div>
+    <div class="topbar"><span class="nav"><span>My claims</span><span>New claim</span></span><span class="who">Signed in: [employee] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="box">Category, date, vendor, amount (₹), description</div>
+      <div class="box">Receipt upload (required above ₹500)</div>
+      <div class="box">Policy check: meals ≤ ₹1,500/day · hotel ≤ ₹6,000 (tier 1) or ₹4,000 · cab ≤ ₹2,000/trip</div>
+      <span class="btn p">Submit</span><span class="btn">Save draft</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>1b. New claim</b> · policy error</div>
+    <div class="topbar"><span class="nav"><span>New claim</span></span><span class="who">Signed in: [employee] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="box">Amount ₹2,400 · category Cab</div>
+      <p class="err">Cab is over the ₹2,000 limit for one trip. Reduce the amount or add a note.</p>
+      <span class="btn p">Submit</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>2. My claims</b> · after submit</div>
+    <div class="topbar"><span class="nav"><span>My claims</span><span>New claim</span></span><span class="who">Signed in: [employee] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <table>
+        <tr><th>Claim</th><th>Amount</th><th>Stage</th></tr>
+        <tr><td>CL-NEW</td><td>₹3,200</td><td><span class="tag">Pending manager</span></td></tr>
+        <tr><td>CL-1047</td><td>₹1,850</td><td><span class="tag">Approved</span></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>3. Claim detail</b> · sent back</div>
+    <div class="topbar"><span class="nav"><span>My claims</span></span><span class="who">Signed in: [employee] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="row"><span>Amount</span><span>₹4,500</span></div>
+      <div class="row"><span>Stage</span><span class="tag">Sent back</span></div>
+      <div class="box">Comment from approver: Please clarify the receipt.</div>
+      <span class="btn p">Resubmit</span>
+    </div>
+  </div>
+</div>
+
+<h2>Line manager (also an employee)</h2>
+<p class="flow">Stage 1: Queue of Pending manager claims · Stage 2: Decision (approve, send back) · Stage 3: Handed to auditor or head · Their own claims appear under the Employee switch.</p>
+<div class="stages">
+  <div class="screen">
+    <div class="cap"><b>1. Approval queue</b> · Manager view</div>
+    <div class="topbar"><span class="nav"><span>Queue</span></span><span class="who">Signed in: [line manager]</span><span class="switch"><span class="on">Manager</span><span>Employee</span></span><span class="btn">Log out</span></div>
+    <div class="body">
+      <div class="row"><span>Filter: department · band</span><span class="btn">Apply</span></div>
+      <table>
+        <tr><th>Claim</th><th>Employee</th><th>Amount</th><th>Flags</th></tr>
+        <tr><td>CL-1056</td><td>Sabita</td><td>₹2,900</td><td>Weekend</td></tr>
+        <tr><td>CL-1058</td><td>Vennela</td><td>₹4,500</td><td></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>2. Claim review</b> · Manager view</div>
+    <div class="topbar"><span class="nav"><span>Queue</span></span><span class="who">Signed in: [line manager]</span><span class="switch"><span class="on">Manager</span><span>Employee</span></span><span class="btn">Log out</span></div>
+    <div class="body">
+      <div class="row"><span>Amount</span><span>₹2,900</span></div>
+      <div class="row"><span>Flag</span><span class="tag">Weekend</span></div>
+      <div class="box">Receipt preview</div>
+      <span class="btn p">Approve</span><span class="btn">Send back</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>3. Send back</b> · Manager view</div>
+    <div class="topbar"><span class="nav"><span>Queue</span></span><span class="who">Signed in: [line manager]</span><span class="switch"><span class="on">Manager</span><span>Employee</span></span><span class="btn">Log out</span></div>
+    <div class="body">
+      <div class="box">Comment sent to employee: Please clarify the receipt.</div>
+      <p class="note">The comment is fixed text in this prototype. A free-text box is not built yet.</p>
+      <span class="btn p">Confirm send back</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>4. Own claim</b> · Employee view</div>
+    <div class="topbar"><span class="nav"><span>My claims</span><span>New claim</span></span><span class="who">Signed in: [line manager]</span><span class="switch"><span>Manager</span><span class="on">Employee</span></span><span class="btn">Log out</span></div>
+    <div class="body">
+      <table>
+        <tr><th>Claim</th><th>Amount</th><th>Stage</th></tr>
+        <tr><td>CL-NEW-R</td><td>₹1,200</td><td><span class="tag">Pending manager</span></td></tr>
+      </table>
+      <p class="note">Their own claim goes to their own manager, not to themselves.</p>
+    </div>
+  </div>
+</div>
+
+<h2>Finance auditor</h2>
+<p class="flow">Stage 1: Queue of Pending auditor claims (above ₹25,000) · Stage 2: Decision · Stage 3: Sample audit</p>
+<div class="stages">
+  <div class="screen">
+    <div class="cap"><b>1. Audit queue</b> · Pending auditor</div>
+    <div class="topbar"><span class="nav"><span>Queue</span><span>Sample audit</span></span><span class="who">Signed in: [finance auditor] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <table>
+        <tr><th>Claim</th><th>Employee</th><th>Amount</th></tr>
+        <tr><td>CL-1042</td><td>Asha</td><td>₹31,000</td></tr>
+        <tr><td>CL-1051</td><td>Sabita</td><td>₹31,000</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>2. Claim review</b> · decision</div>
+    <div class="topbar"><span class="nav"><span>Queue</span></span><span class="who">Signed in: [finance auditor] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="row"><span>Amount</span><span>₹31,000</span></div>
+      <div class="row"><span>Manager approved</span><span>Ravi</span></div>
+      <span class="btn p">Approve</span><span class="btn">Send back</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>3. Sample audit</b> · audit tab</div>
+    <div class="topbar"><span class="nav"><span>Queue</span><span>Sample audit</span></span><span class="who">Signed in: [finance auditor] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="box">Prototype: one fixed sample (CL-1053). Random 10% sampling is not built.</div>
+      <table>
+        <tr><th>Claim</th><th>Amount</th><th>Result</th></tr>
+        <tr><td>CL-1053</td><td>₹4,000</td><td><span class="tag">Sampled</span></td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<h2>Finance head</h2>
+<p class="flow">Stage 1: Queue of Pending head claims (above ₹1,00,000) · Stage 2: Decision · Stage 3: Payout export · Stage 4: Dashboard</p>
+<div class="stages">
+  <div class="screen">
+    <div class="cap"><b>1. Approval queue</b> · Pending head</div>
+    <div class="topbar"><span class="nav"><span>Queue</span><span>Payout</span><span>Dashboard</span></span><span class="who">Signed in: [finance head] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <table>
+        <tr><th>Claim</th><th>Employee</th><th>Amount</th></tr>
+        <tr><td>CL-1065</td><td>Vikram</td><td>₹1,20,000</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>2. Claim review</b> · decision</div>
+    <div class="topbar"><span class="nav"><span>Queue</span></span><span class="who">Signed in: [finance head] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="row"><span>Amount</span><span>₹1,20,000</span></div>
+      <div class="row"><span>Auditor approved</span><span>Meera</span></div>
+      <span class="btn p">Approve</span><span class="btn">Send back</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>3. Payout</b> · approved claims</div>
+    <div class="topbar"><span class="nav"><span>Queue</span><span>Payout</span><span>Dashboard</span></span><span class="who">Signed in: [finance head] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="box">Approved claims ready to pay: CL-1047, CL-1053</div>
+      <span class="btn p">Export payout CSV</span>
+      <span class="btn">Mark as paid</span>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="cap"><b>4. Dashboard</b> · overview</div>
+    <div class="topbar"><span class="nav"><span>Queue</span><span>Payout</span><span>Dashboard</span></span><span class="who">Signed in: [finance head] <span class="btn">Log out</span></span></div>
+    <div class="body">
+      <div class="row"><span>Pending manager</span><span>2</span></div>
+      <div class="row"><span>Pending auditor</span><span>2</span></div>
+      <div class="row"><span>Pending head</span><span>1</span></div>
+      <div class="row"><span>Approved</span><span>2</span></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
