@@ -57,11 +57,20 @@ public class NotificationService {
                 claim.claimNumber() + (reason == null ? "" : ": " + abbreviate(reason)));
     }
 
+    public void payoutDone(ClaimRow claim, UUID batchId, String batchNumber) {
+        insert(claim.employeeId(), "PAYOUT_DONE", claim.id(), batchId, "Payment sent",
+                claim.claimNumber() + ": " + Money.format(claim.totalAmount()) + " INR paid in " + batchNumber);
+    }
+
     private void insert(UUID recipient, String type, UUID claimId, String title, String message) {
+        insert(recipient, type, claimId, null, title, message);
+    }
+
+    private void insert(UUID recipient, String type, UUID claimId, UUID batchId, String title, String message) {
         jdbc.sql("""
-                INSERT INTO notification (recipient_id, type, claim_id, title, message)
-                VALUES (:r, :type, :claim, :title, :message)""")
-                .param("r", recipient).param("type", type).param("claim", claimId)
+                INSERT INTO notification (recipient_id, type, claim_id, payout_batch_id, title, message)
+                VALUES (:r, :type, :claim, :batch, :title, :message)""")
+                .param("r", recipient).param("type", type).param("claim", claimId).param("batch", batchId)
                 .param("title", title).param("message", abbreviate(message))
                 .update();
     }
