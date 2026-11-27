@@ -98,11 +98,11 @@ export function resilient(name, httpMod, mockMod) {
         throw new ApiError(501, 'NOT_AVAILABLE', 'This action needs the server, which is not connected.');
       }
       if (typeof httpFn !== 'function') {
-        // No adapter for this endpoint yet: serve it from the mock as a backup.
-        if (typeof mockFn !== 'function') throw new ApiError(501, 'NOT_AVAILABLE', 'This action is not available yet.');
-        await ensureMockSession();
-        setBackendStatus('mock', `${name}.${key}: no server adapter yet`);
-        return mockFn(...args);
+        // The server has no endpoint for this action (e.g. removing a receipt). Say so instead of
+        // silently switching the whole session to demo data.
+        throw new ApiError(501, 'NOT_AVAILABLE', key === 'removeReceipt'
+          ? 'Removing a receipt is not supported by the server yet. Upload a replacement instead.'
+          : 'This action is not available on the server yet.');
       }
       try {
         const result = await httpFn(...args);

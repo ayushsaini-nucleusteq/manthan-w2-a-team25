@@ -7,6 +7,7 @@ import { getSession } from '../session.js';
 import { get, post } from './client.js';
 import { itemsOf, nameOf } from './common.js';
 import { countOf, fetchAllPages, fetchClaimRaw, mapClaim, mapClaimSummary, mapInboxItem, resolveVersion } from './approvals.js';
+import { resolveReceiptUrls } from './claims.js';
 
 const QUEUE = '/api/auditor/queue';
 const SAMPLES = '/api/auditor/sample-audits';
@@ -205,7 +206,7 @@ async function sampleAction(claimId, action, payload) {
   const body = { version };
   if (payload?.comment !== undefined) body.comment = payload.comment;
   if (payload?.reason !== undefined) body.reason = payload.reason;
-  return mapClaim(await post(`${SAMPLES}/${encodeURIComponent(claimId)}/${action}`, body));
+  return resolveReceiptUrls(mapClaim(await post(`${SAMPLES}/${encodeURIComponent(claimId)}/${action}`, body)));
 }
 
 /**
