@@ -95,7 +95,18 @@ Status: you reviewed C1–C7 and kept all of them as they are.
 | D7 | O5 | Cross-employee receipt-hash duplicate: message only, never the other claim's ids (for every caller) | `PolicyFinding` description |
 | D8 | O6 | Offline replay: same id + same content → existing record (200); same id + different content → 409 | `POST /claims`, `POST /claims/{id}/lines`; Conventions in `data-model.md` |
 | D9 | O7 | Duplicate scope: earlier lines of the same employee in claims SUBMITTED or later (incl. SENT_BACK), excluding DRAFT, AUTO_REJECTED, REJECTED, plus earlier lines in the same claim | `submit`; "Lines in scope" in `data-model.md` |
-| D10 | O8 | Passwordless sign-in is demo only, behind `DEMO_LOGIN_ENABLED` (default true in docker-compose, false otherwise); when off, `/auth/users` and `/auth/login` return 404 | "Known limitations" in `openapi.yaml` |
+| D10 | O8 | ~~Passwordless demo sign-in behind `DEMO_LOGIN_ENABLED`~~ **Superseded by W1** | — |
+
+## Changes from the BA's final wireframes
+
+| # | Change | Where in the contract |
+|---|---|---|
+| W1 | Login is email + password only (BCrypt). Wrong email or wrong password → 401 "Email or password is incorrect" (same message). `GET /api/auth/users` and `DEMO_LOGIN_ENABLED` removed; no public user list | `POST /api/auth/login`, `LoginRequest` |
+| W2 | `POST /api/auth/logout`; logins, failed logins and logouts are audited (`LOGIN`, `LOGIN_FAILED`, `LOGOUT`) | `POST /api/auth/logout`, `AuditAction` |
+| W3 | Seed users: `firstname.lastname@expenseflow.test`, one shared password from env `SEED_USER_PASSWORD` (only in `.env`); demo accounts per role | `docs/demo-accounts.md`, `data-model.md` |
+| W4 | `claimNumber` = `CL-` + zero-padded sequence, unique, in every claim response, searchable with `q` in all claim lists | `ClaimSummary.claimNumber`, `ClaimSearch` parameter |
+| W5 | Approvals inbox filters `departmentId`, `minAmount`, `maxAmount` | `GET /api/approvals/inbox` |
+| W6 | Approval steps carry `approverName`, `onBehalfOfName`, `decidedAt` | `ApprovalStep` |
 
 ## To build in backend/deploy (US18-AC2)
 

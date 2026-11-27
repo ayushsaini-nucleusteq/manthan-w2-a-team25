@@ -14,7 +14,9 @@ RUN ./mvnw -B -q package -DskipTests
 # --- runtime stage ---
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-RUN groupadd --system app && useradd --system --gid app --no-create-home app
+RUN groupadd --system app && useradd --system --gid app --no-create-home app \
+    && mkdir -p /data/receipts && chown app:app /data/receipts
+# Receipts live on the "receipts" volume; a fresh named volume copies this directory's owner (app).
 COPY --from=build /workspace/target/*.jar app.jar
 USER app
 EXPOSE 8080

@@ -8,7 +8,7 @@ shown as "not found" for both 403 and 404 responses.
 
 | Screen | Endpoints |
 |---|---|
-| **S1 Sign-in / role switch**: pick a user; the role sets the home screen | `GET /api/auth/users` (public picker, `q` search) · `POST /api/auth/login` (`userId` → 8 h JWT, `LOGIN` audited) · `GET /api/auth/me` (`homeScreen` = highest role: F1 / A1 / M1 / E1). Role switch = sign in again as a different user; the JWT carries all of that user's roles. Available only with `DEMO_LOGIN_ENABLED=true` (demo-only limitation). |
+| **S1 Sign-in / role switch**: pick a user; the role sets the home screen | `POST /api/auth/login` (`email` + `password` → 8 h JWT + user, roles, `homeScreen`; 401 "Email or password is incorrect"; `LOGIN` / `LOGIN_FAILED` audited) · `GET /api/auth/me` (`homeScreen` = highest role: F1 / A1 / M1 / E1) · `POST /api/auth/logout` (audited; client discards the token). Role switch = sign out and sign in as a different user; the JWT carries all of that user's roles. No public user list. Demo accounts: `docs/demo-accounts.md`. |
 | **S2 Notifications**: approvals waiting, sent-back claims, payout done | `GET /api/notifications?unread=` · `GET /api/notifications/unread-count` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` |
 | **S3 Audit trail (per claim)**: read-only, append-only timeline | `GET /api/claims/{id}/audit-trail` |
 
@@ -16,7 +16,7 @@ shown as "not found" for both 403 and 404 responses.
 
 | Screen | Endpoints |
 |---|---|
-| **E1 My claims**: own claims only; status chips and filters | `GET /api/claims?scope=mine&status=&q=` (`statusCounts` feeds the chips) |
+| **E1 My claims**: own claims only; status chips and filters | `GET /api/claims?scope=mine&status=&q=` (`statusCounts` feeds the chips; `q` searches `claimNumber` `CL-…` and title) |
 | **E2 New / edit claim header**: title, purpose, trip dates; INR fixed | `POST /api/claims` (optional client `id` for offline drafts) · `PATCH /api/claims/{id}` · `DELETE /api/claims/{id}` (unsubmitted draft) · `GET /api/claims/{id}` |
 | **E3 Line items**: cards on mobile; add, edit, delete; running total | `POST /api/claims/{id}/lines` (optional client `id`) · `PUT /api/claims/{id}/lines/{lineId}` · `DELETE /api/claims/{id}/lines/{lineId}` (each returns the claim with `totalAmount`) |
 | **E4 Line editor**: category, amount, date, vendor, notes, receipt; live policy hints | `GET /api/expense-categories` · `GET /api/policy/current` · `POST /api/claims/{id}/policy-preview` with `{ line, lineId, hasReceipt }` |
@@ -28,8 +28,8 @@ shown as "not found" for both 403 and 404 responses.
 
 | Screen | Endpoints |
 |---|---|
-| **M1 Approval inbox**: oldest first | `GET /api/approvals/inbox?state=PENDING\|OVERDUE\|SENT_BACK\|DECIDED` (items carry `overdue`, `delegated`, `onBehalfOf`) |
-| **M2 Claim review**: lines, receipts in a side panel, policy and weekend flags | `GET /api/claims/{id}` (line `findings`, `flags`) · `GET /api/claims/{id}/lines/{lineId}/receipt` (inline) |
+| **M1 Approval inbox**: oldest first | `GET /api/approvals/inbox?state=PENDING\|OVERDUE\|SENT_BACK\|DECIDED&departmentId=&minAmount=&maxAmount=&q=` (items carry `overdue`, `delegated`, `onBehalfOf`) |
+| **M2 Claim review**: lines, receipts in a side panel, policy and weekend flags | `GET /api/claims/{id}` (line `findings`, `flags`; `approvalSteps[]` with `approverName`, `onBehalfOfName`, `decidedAt`) · `GET /api/claims/{id}/lines/{lineId}/receipt` (inline) |
 | **M3 Decision bar**: approve (one tap), send back (comment), reject (reason) | `POST /api/claims/{id}/approve` · `POST /api/claims/{id}/send-back` · `POST /api/claims/{id}/reject` · `POST /api/claims/{id}/comments` |
 | **M4 Delegation**: delegate and leave dates | `GET /api/users?role=MANAGER` (pick delegate) · `GET /api/delegations?scope=given` · `POST /api/delegations` · `DELETE /api/delegations/{id}` |
 

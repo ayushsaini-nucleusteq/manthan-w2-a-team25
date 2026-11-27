@@ -12,6 +12,10 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -76,6 +80,38 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + e.getName() + "'", req);
     }
 
+    @ExceptionHandler(BadRequestException.class)
+    ResponseEntity<ApiError> badRequest(BadRequestException e, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage(), req);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    ResponseEntity<ApiError> missingPart(MissingServletRequestPartException e, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "Missing multipart field '" + e.getRequestPartName() + "'", req);
+    }
+
+    @ExceptionHandler({MaxUploadSizeExceededException.class, MultipartException.class})
+    ResponseEntity<ApiError> uploadTooLarge(Exception e, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, e instanceof MaxUploadSizeExceededException
+                ? "Receipt is larger than 5 MB"
+                : "Malformed multipart upload", req);
+    }
+
+    // ---- 401 ----
+
+    @ExceptionHandler(UnauthorizedException.class)
+    ResponseEntity<ApiError> unauthorized(UnauthorizedException e, HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, e.getMessage(), req);
+    }
+
+    // ---- 403 ----
+
+    @ExceptionHandler({ForbiddenException.class, AccessDeniedException.class})
+    ResponseEntity<ApiError> forbidden(RuntimeException e, HttpServletRequest req) {
+        String message = e instanceof ForbiddenException ? e.getMessage() : "Your role does not allow this operation";
+        return build(HttpStatus.FORBIDDEN, message, req);
+    }
+
     // ---- 404 ----
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
@@ -105,6 +141,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(OptimisticLockingFailureException.class)
     ResponseEntity<ApiError> staleUpdate(OptimisticLockingFailureException e, HttpServletRequest req) {
         return build(HttpStatus.CONFLICT, "Resource was modified by another request; reload and retry", req);
+    }
+
+    // ---- 422 ----
+
+    @ExceptionHandler(UnprocessableException.class)
+    ResponseEntity<ApiError> unprocessable(UnprocessableException e, HttpServletRequest req) {
+        HttpStatus status = HttpStatus.UNPROCESSABLE_CONTENT;
+        return ResponseEntity.status(status).body(ApiError.of(status, e.getMessage(), req).withErrors(e.errors()));
     }
 
     // ---- everything else ----
