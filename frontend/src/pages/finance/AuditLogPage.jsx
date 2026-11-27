@@ -228,7 +228,7 @@ export default function AuditLogPage() {
               label="Claim number or ID"
               size="sm"
               icon={<SearchIcon size={16} />}
-              placeholder="EXP-2026-000123"
+              placeholder="CL-000123 or EXP-2026-000123"
               value={filters.claim}
               onChange={update('claim')}
               autoComplete="off"
@@ -284,7 +284,7 @@ export default function AuditLogPage() {
 
 function claimFilter(q) {
   if (!q) return {}
-  return /^exp-/i.test(q) ? { claimNumber: q } : { claimId: q }
+  return /^(exp|cl)-/i.test(q) ? { claimNumber: q } : { claimId: q }
 }
 
 function ClaimLink({ event }) {

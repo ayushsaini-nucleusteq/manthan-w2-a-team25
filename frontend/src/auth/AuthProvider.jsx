@@ -149,7 +149,17 @@ export default function AuthProvider({ children }) {
   useEffect(() => {
     window.addEventListener(EVENTS.unauthorized, expire)
     const unsubscribe = subscribeSession((next) => {
-      if (!next) expire()
+      if (!next) {
+        expire()
+        return
+      }
+      // The API layer swapped a backend session for a mock one because the server stopped
+      // answering (see api/resilient.js). Adopt it so the UI keeps working on demo data.
+      if (next.fallbackFrom && liveSession.current && next.token !== liveSession.current.token) {
+        liveSession.current = next
+        setSessionState(next)
+        setActiveRole((r) => (r && userRoles(next).includes(r) ? r : defaultRole(next)))
+      }
     })
     return () => {
       window.removeEventListener(EVENTS.unauthorized, expire)
@@ -203,8 +213,7 @@ export default function AuthProvider({ children }) {
 
   const loadPickerUsers = useCallback((q = '') => authApi.listLoginUsers({ q }), [])
 
-  const login = useCallback(async (userId) => {
-    const next = await authApi.login(userId)
+  const adoptSession = useCallback((next) => {
     setSession(next)
     const role = defaultRole(next)
     writeStoredRole(role)
@@ -214,6 +223,18 @@ export default function AuthProvider({ children }) {
     setActiveRole(role)
     return { ...next, activeRole: role, homePath: ROLE_HOME[role] || '/' }
   }, [])
+
+  /** Demo sign-in (mock data): pick a seeded user. */
+  const login = useCallback(async (userId) => adoptSession(await authApi.login(userId)), [adoptSession])
+
+  /** Real sign-in against the backend: POST /api/auth/login {email, password}. */
+  const loginWithPassword = useCallback(
+    async (email, password) => adoptSession(await authApi.loginWithPassword(email, password)),
+    [adoptSession],
+  )
+
+  /** Is the backend reachable? Used by the sign-in screen to choose real or demo sign-in. */
+  const probeBackend = useCallback((opts) => authApi.probeBackend(opts), [])
 
   const logout = useCallback(() => signOutLocally(), [signOutLocally])
 
@@ -246,13 +267,16 @@ export default function AuthProvider({ children }) {
       homePath: session ? ROLE_HOME[activeRole] || '/' : '/login',
       isAuthenticated: Boolean(session),
       hasRole,
+      dataSource: session?.source === 'http' ? 'server' : session ? 'demo' : null,
       loadPickerUsers,
       login,
+      loginWithPassword,
+      probeBackend,
       logout,
       switchRole,
       activateRole,
     }),
-    [session, roles, activeRole, hasRole, loadPickerUsers, login, logout, switchRole, activateRole],
+    [session, roles, activeRole, hasRole, loadPickerUsers, login, loginWithPassword, probeBackend, logout, switchRole, activateRole],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

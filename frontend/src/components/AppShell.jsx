@@ -6,6 +6,7 @@ import ErrorBoundary from './ErrorBoundary.jsx'
 import HelpButton from './HelpButton.jsx'
 import NavBar from './NavBar.jsx'
 import OfflineBanner from './OfflineBanner.jsx'
+import DataSourceBanner from './DataSourceBanner.jsx'
 import PageLoader from './PageLoader.jsx'
 import { SubNavSlotContext } from './subNavContext.js'
 
@@ -42,6 +43,7 @@ export default function AppShell() {
         <NavBar />
         <div className="subnav-slot" ref={setSubNavEl} />
         <OfflineBanner />
+        <DataSourceBanner />
         <main id="main" ref={mainRef} className="app-main" tabIndex={-1}>
           <ErrorBoundary inline resetKey={location.pathname}>
             <Suspense fallback={<PageLoader label="Loading screen…" />}>

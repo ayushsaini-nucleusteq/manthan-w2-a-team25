@@ -21,19 +21,71 @@
  *      `import.meta.env.VITE_USE_MOCK_API`). Pages don't change.
  *   devtoolsApi stays mock-only.
  */
-export * as authApi from './mock/auth.js';
-export * as claimsApi from './mock/claims.js';
-export * as approvalsApi from './mock/approvals.js';
-export * as delegationsApi from './mock/delegations.js';
-export * as auditorApi from './mock/auditor.js';
-export * as referenceApi from './mock/reference.js';
-export * as policyApi from './mock/policy.js';
-export * as dashboardApi from './mock/dashboard.js';
-export * as payoutsApi from './mock/payouts.js';
-export * as usersApi from './mock/users.js';
-export * as notificationsApi from './mock/notifications.js';
-export * as auditApi from './mock/audit.js';
+import * as mockAuth from './mock/auth.js';
+import * as mockClaims from './mock/claims.js';
+import * as mockApprovals from './mock/approvals.js';
+import * as mockDelegations from './mock/delegations.js';
+import * as mockAuditor from './mock/auditor.js';
+import * as mockReference from './mock/reference.js';
+import * as mockPolicy from './mock/policy.js';
+import * as mockDashboard from './mock/dashboard.js';
+import * as mockPayouts from './mock/payouts.js';
+import * as mockUsers from './mock/users.js';
+import * as mockNotifications from './mock/notifications.js';
+import * as mockAudit from './mock/audit.js';
+import * as httpAuth from './http/auth.js';
+import { isBackendUnavailable, markBackendDown, probeBackend } from './http/client.js';
+import { registerMockAuth, resilient, setBackendStatus } from './resilient.js';
+import { getSession, setSession } from './session.js';
+
+// Real endpoint adapters: every ./http/<module>.js that exists is used; a module without one
+// (or a function it does not implement) is served from the mock, so pages never break.
+const HTTP = import.meta.glob('./http/*.js', { eager: true });
+const httpModule = (name) => HTTP[`./http/${name}.js`] || {};
+
+registerMockAuth(mockAuth);
+
+export const claimsApi = resilient('claims', httpModule('claims'), mockClaims);
+export const approvalsApi = resilient('approvals', httpModule('approvals'), mockApprovals);
+export const delegationsApi = resilient('delegations', httpModule('delegations'), mockDelegations);
+export const auditorApi = resilient('auditor', httpModule('auditor'), mockAuditor);
+export const referenceApi = resilient('reference', httpModule('reference'), mockReference);
+export const policyApi = resilient('policy', httpModule('policy'), mockPolicy);
+export const dashboardApi = resilient('dashboard', httpModule('dashboard'), mockDashboard);
+export const payoutsApi = resilient('payouts', httpModule('payouts'), mockPayouts);
+export const usersApi = resilient('users', httpModule('users'), mockUsers);
+export const notificationsApi = resilient('notifications', httpModule('notifications'), mockNotifications);
+export const auditApi = resilient('audit', httpModule('audit'), mockAudit);
 export * as devtoolsApi from './mock/devtools.js';
+
+const resilientMe = resilient('auth', { me: httpAuth.me }, { me: mockAuth.me }).me;
+
+/** Sign-in: email + password against the backend, or the demo picker over mock data. */
+export const authApi = {
+  probeBackend,
+  isDemoLoginEnabled: mockAuth.isDemoLoginEnabled,
+  listLoginUsers: (args) => mockAuth.listLoginUsers(args),
+  async login(userId) {
+    const session = { ...(await mockAuth.login(userId)), source: 'mock' };
+    setSession(session);
+    setBackendStatus('mock', 'Demo sign-in');
+    return session;
+  },
+  async loginWithPassword(email, password) {
+    try {
+      const session = await httpAuth.loginWithPassword(email, password);
+      setBackendStatus('http');
+      return session;
+    } catch (error) {
+      if (isBackendUnavailable(error, 'POST')) markBackendDown();
+      throw error;
+    }
+  },
+  me: resilientMe,
+  logout: () => (getSession()?.source === 'http' ? httpAuth.logout() : mockAuth.logout()),
+};
+
+export { getBackendStatus, subscribeBackendStatus } from './resilient.js';
 
 export { ApiError, isApiError, isNotFoundError, isUnauthenticatedError, isConflictError, errorMessage, fieldErrors } from './errors.js';
 export { getSession, setSession, clearSession, getToken, isSessionExpired, subscribeSession } from './session.js';

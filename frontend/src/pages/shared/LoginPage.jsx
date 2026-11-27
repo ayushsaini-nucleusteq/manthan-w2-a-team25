@@ -110,15 +110,133 @@ function SkeletonRows() {
   )
 }
 
-/** S1 Sign-in: pick a user (backend contract: GET /api/auth/users + POST /api/auth/login {userId}). */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Real sign-in against the backend: POST /api/auth/login {email, password}. */
+function PasswordSignIn({ next, onUnavailable }) {
+  const { loginWithPassword } = useAuth()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [touched, setTouched] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const emailError = touched && email && !EMAIL_RE.test(email.trim()) ? 'Enter a valid work email, for example name@company.com.' : null
+  const canSubmit = EMAIL_RE.test(email.trim()) && password.length > 0 && !busy
+
+  async function onSubmit(event) {
+    event.preventDefault()
+    setTouched(true)
+    if (!canSubmit) return
+    setBusy(true)
+    setError(null)
+    try {
+      const s = await loginWithPassword(email.trim(), password)
+      toast.success(`Signed in as ${s.user?.fullName || email.trim()}.`)
+      navigate(next || s.homePath || '/', { replace: true })
+    } catch (err) {
+      setBusy(false)
+      if (err?.status === 0 || err?.status >= 502) {
+        toast.info('The server is not reachable, so ExpenseFlow switched to demo data.', { title: 'Using demo data' })
+        onUnavailable()
+        return
+      }
+      setError(err)
+    }
+  }
+
+  return (
+    <form className="stack" onSubmit={onSubmit} noValidate>
+      <TextInput
+        label="Work email"
+        type="email"
+        autoComplete="username"
+        icon={<UserIcon size={18} />}
+        value={email}
+        required
+        onChange={(e) => setEmail(e.target.value)}
+        onBlur={() => setTouched(true)}
+        error={emailError}
+      />
+      <TextInput
+        label="Password"
+        type={showPassword ? 'text' : 'password'}
+        autoComplete="current-password"
+        icon={<ShieldIcon size={18} />}
+        value={password}
+        required
+        onChange={(e) => setPassword(e.target.value)}
+        labelAction={
+          <button type="button" className="link-button" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword}>
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        }
+      />
+      {error && (
+        <InfoBanner tone="danger" live>
+          {error.status === 401 ? 'Email or password is incorrect.' : errorMessage(error, 'Sign-in failed. Please try again.')}
+        </InfoBanner>
+      )}
+      <Button
+        type="submit"
+        size="lg"
+        block
+        className="btn-signin"
+        disabled={!canSubmit}
+        loading={busy}
+        loadingLabel="Signing in…"
+        iconRight={<ArrowRightIcon size={18} />}
+      >
+        Log in
+      </Button>
+    </form>
+  )
+}
+
+/**
+ * S1 Sign-in. When the backend answers, sign in with email and password (POST /api/auth/login).
+ * When it does not, fall back to the demo picker over mock data.
+ */
 export default function LoginPage() {
+  const { probeBackend } = useAuth()
+  const [params] = useSearchParams()
+  const forceDemo = params.get('demo') === '1'
+  const [mode, setMode] = useState(forceDemo ? 'demo' : 'checking')
+
+  useEffect(() => {
+    let cancelled = false
+    if (forceDemo) return undefined
+    probeBackend({ force: true }).then(
+      (up) => !cancelled && setMode(up ? 'server' : 'demo'),
+      () => !cancelled && setMode('demo'),
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [probeBackend, forceDemo])
+
+  return <SignInScreen mode={mode} setMode={setMode} />
+}
+
+function SignInScreen({ mode, setMode }) {
   useDocumentTitle('Sign in')
-  const { loadPickerUsers, login } = useAuth()
+  const { loadPickerUsers, login, probeBackend } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
   const [params] = useSearchParams()
   const expired = params.get('expired') === '1'
   const next = safeNextPath(params.get('next'))
+  const [retrying, setRetrying] = useState(false)
+
+  async function retryServer() {
+    setRetrying(true)
+    const up = await probeBackend({ force: true }).catch(() => false)
+    setRetrying(false)
+    if (up) setMode('server')
+    else toast.info('The server is still not reachable.', { title: 'Using demo data' })
+  }
 
   const [query, setQuery] = useState('')
   const debounced = useDebounce(query.trim(), 300)
@@ -284,16 +402,48 @@ export default function LoginPage() {
         <section className="auth-card" aria-labelledby="signin-title">
           <div className="stack-sm">
             <h1 id="signin-title" className="auth-title">Sign in to ExpenseFlow</h1>
-            <p className="auth-lead">Choose who you are to continue.</p>
+            <p className="auth-lead">
+              {mode === 'server' ? 'Use your work email and password.' : mode === 'demo' ? 'Choose who you are to continue.' : 'Connecting to the server…'}
+            </p>
           </div>
 
           {expired && !disabled && (
             <InfoBanner tone="warning" title="Your session ended" live>
-              For your security you were signed out. Pick your name to sign in again.
+              For your security you were signed out. Sign in again to continue.
             </InfoBanner>
           )}
 
-          {disabled ? (
+          {mode === 'checking' ? (
+            <div className="stack-sm" role="status" aria-label="Checking the server">
+              <Skeleton height={48} />
+              <Skeleton height={48} />
+              <Skeleton height={48} />
+            </div>
+          ) : mode === 'server' ? (
+            <>
+              <PasswordSignIn next={next} onUnavailable={() => setMode('demo')} />
+              <button type="button" className="link-button" onClick={() => setMode('demo')}>
+                Use demo data instead
+              </button>
+            </>
+          ) : null}
+
+          {mode === 'demo' && (
+            <InfoBanner
+              tone="warning"
+              title="Using demo data"
+              live
+              action={
+                <Button size="sm" variant="secondary" loading={retrying} loadingLabel="Checking…" onClick={retryServer}>
+                  Try the server again
+                </Button>
+              }
+            >
+              The server is not reachable, so you are signing in to sample data. Changes stay in this browser.
+            </InfoBanner>
+          )}
+
+          {mode !== 'demo' ? null : disabled ? (
             <InfoBanner tone="danger" title="Sign-in unavailable" live>
               Demo sign-in is turned off in this environment.
             </InfoBanner>
@@ -340,7 +490,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          {!disabled && (
+          {mode === 'demo' && !disabled && (
             <div className="stack-sm">
               <h2 className="section-label" id="personas-label">Quick demo personas</h2>
               {personas.error ? (
@@ -374,9 +524,6 @@ export default function LoginPage() {
             </div>
           )}
 
-          <InfoBanner tone="info">
-            Demo sign-in: pick any user. Real authentication is not part of this demo.
-          </InfoBanner>
         </section>
 
         <PromoPanel />
