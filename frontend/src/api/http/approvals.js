@@ -9,6 +9,7 @@ import { ApiError } from '../errors.js';
 import { getSession } from '../session.js';
 import { API_BASE_URL, get, post } from './client.js';
 import { itemsOf, money, nameOf, totalOf } from './common.js';
+import { resolveReceiptUrls } from './claims.js';
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -340,7 +341,8 @@ export async function getReviewClaim(claimId) {
   const claim = mapClaim(await fetchClaimRaw(claimId));
   const viewerId = currentUserId();
   if (!claim || (viewerId && claim.employeeId === viewerId)) throw new ApiError(404, 'NOT_FOUND', 'Claim not found.');
-  return claim;
+  // Receipts are bearer-protected: load them as blob URLs so <img> previews work.
+  return resolveReceiptUrls(claim);
 }
 
 /**
@@ -352,7 +354,7 @@ export async function getReviewClaim(claimId) {
 export async function approve(claimId, { comment, version } = {}) {
   const v = await resolveVersion(claimId, version);
   const text = typeof comment === 'string' && comment.trim() ? comment.trim() : null;
-  return mapClaim(await post(`/api/claims/${encodeURIComponent(claimId)}/approve`, { version: v, comment: text }));
+  return resolveReceiptUrls(mapClaim(await post(`/api/claims/${encodeURIComponent(claimId)}/approve`, { version: v, comment: text })));
 }
 
 /**
@@ -363,7 +365,7 @@ export async function approve(claimId, { comment, version } = {}) {
  */
 export async function sendBack(claimId, { comment, version } = {}) {
   const v = await resolveVersion(claimId, version);
-  return mapClaim(await post(`/api/claims/${encodeURIComponent(claimId)}/send-back`, { version: v, comment: comment ?? '' }));
+  return resolveReceiptUrls(mapClaim(await post(`/api/claims/${encodeURIComponent(claimId)}/send-back`, { version: v, comment: comment ?? '' })));
 }
 
 /**
@@ -374,5 +376,5 @@ export async function sendBack(claimId, { comment, version } = {}) {
  */
 export async function reject(claimId, { reason, version } = {}) {
   const v = await resolveVersion(claimId, version);
-  return mapClaim(await post(`/api/claims/${encodeURIComponent(claimId)}/reject`, { version: v, reason: reason ?? '' }));
+  return resolveReceiptUrls(mapClaim(await post(`/api/claims/${encodeURIComponent(claimId)}/reject`, { version: v, reason: reason ?? '' })));
 }
