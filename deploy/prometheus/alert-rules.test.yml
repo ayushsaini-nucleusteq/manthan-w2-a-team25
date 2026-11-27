@@ -1,0 +1,51 @@
+# promtool unit tests for alert-rules.yml (run: see docs/runbook.md, "Check alert rules").
+# OldestPendingApprovalTooOld: threshold 48h (172800 s) comes from the backend metric, not this file.
+rule_files:
+  - alert-rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Oldest approval crosses 48h at minute 10 and stays over: pending for 5m, then ONE firing alert that stays
+  # firing (same single alert at minute 30 and 60, i.e. not re-triggered per evaluation).
+  - interval: 1m
+    input_series:
+      - series: 'expenseflow_oldest_pending_approval_seconds{job="backend", step="MANAGER"}'
+        values: '172200+60x70'        # 47h50m, +1 min per minute → passes 48h at minute 10
+      - series: 'expenseflow_approval_age_threshold_seconds{job="backend"}'
+        values: '172800x70'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: OldestPendingApprovalTooOld
+        exp_alerts: []
+      - eval_time: 13m              # breached at 11m, still inside "for: 5m"
+        alertname: OldestPendingApprovalTooOld
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: OldestPendingApprovalTooOld
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "An approval has been pending longer than the configured threshold"
+              description: "Oldest pending approval has waited 2d 0h 20m 0s. See the 'Oldest pending approval age' panel and docs/runbook.md."
+      - eval_time: 60m
+        alertname: OldestPendingApprovalTooOld
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "An approval has been pending longer than the configured threshold"
+              description: "Oldest pending approval has waited 2d 0h 50m 0s. See the 'Oldest pending approval age' panel and docs/runbook.md."
+
+  # A raised threshold (policy change) clears the condition without editing Prometheus.
+  - interval: 1m
+    input_series:
+      - series: 'expenseflow_oldest_pending_approval_seconds{job="backend", step="AUDITOR"}'
+        values: '200000x30'
+      - series: 'expenseflow_approval_age_threshold_seconds{job="backend"}'
+        values: '259200x30'           # 72h
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OldestPendingApprovalTooOld
+        exp_alerts: []

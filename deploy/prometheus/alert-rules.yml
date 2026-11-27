@@ -48,3 +48,20 @@ groups:
         annotations:
           summary: "p95 latency above 500ms"
           description: "p95 request latency is {{ $value | humanizeDuration }}."
+
+      # US18: the oldest pending approval has waited longer than the configured threshold. The threshold is
+      # NOT hard-coded here: the backend exports the policy's overdueThresholdHours as
+      # expenseflow_approval_age_threshold_seconds (US18-AC1), so changing the policy (F4) moves the alert.
+      # One breach = one alert: it goes pending, fires once after 5m, and stays firing (not re-fired on each
+      # scrape or dashboard refresh) until the backlog clears; keep_firing_for stops flapping at the edge (US18-AC2).
+      - alert: OldestPendingApprovalTooOld
+        expr: |
+          max(expenseflow_oldest_pending_approval_seconds{job="backend"})
+            > max(expenseflow_approval_age_threshold_seconds{job="backend"})
+        for: 5m
+        keep_firing_for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "An approval has been pending longer than the configured threshold"
+          description: "Oldest pending approval has waited {{ $value | humanizeDuration }}. See the 'Oldest pending approval age' panel and docs/runbook.md."

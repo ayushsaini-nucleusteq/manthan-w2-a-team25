@@ -157,6 +157,13 @@ public class ClaimViews {
                     .flatMap(s -> routing.actAs(s, me, c.employeeId()))
                     .ifPresent(a -> actions.addAll(List.of("APPROVE", "REJECT", "SEND_BACK")));
         }
+        if (c.status() == ClaimStatus.AUTO_APPROVED && "PENDING".equals(c.sampleAuditStatus())) {
+            steps.stream()
+                    .filter(s -> "PENDING".equals(s.status()) && s.stepType() == StepType.SAMPLE_AUDIT)
+                    .findFirst()
+                    .flatMap(s -> routing.actAs(s, me, c.employeeId()))
+                    .ifPresent(a -> actions.addAll(List.of("CLEAR_SAMPLE", "REJECT", "SEND_BACK")));
+        }
         if (c.status() != ClaimStatus.DRAFT) {
             actions.add("COMMENT");
         }

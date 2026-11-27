@@ -8,7 +8,7 @@ shown as "not found" for both 403 and 404 responses.
 
 | Screen | Endpoints |
 |---|---|
-| **S1 Sign-in / role switch**: pick a user; the role sets the home screen | `POST /api/auth/login` (`email` + `password` → 8 h JWT + user, roles, `homeScreen`; 401 "Email or password is incorrect"; `LOGIN` / `LOGIN_FAILED` audited) · `GET /api/auth/me` (`homeScreen` = highest role: F1 / A1 / M1 / E1) · `POST /api/auth/logout` (audited; client discards the token). Role switch = sign out and sign in as a different user; the JWT carries all of that user's roles. No public user list. Demo accounts: `docs/demo-accounts.md`. |
+| **S1 Sign-in / role switch**: pick a user; the role sets the home screen | `POST /api/auth/login` (`email` + `password` → 8 h JWT + user, roles, `homeScreen`; 401 "Email or password is incorrect"; `LOGIN` / `LOGIN_FAILED` audited) · `GET /api/auth/me` (`homeScreen` = highest role: F1 / A1 / M1 / E1) · `POST /api/auth/logout` (audited; client discards the token). Role switch (wireframes v4): a person with several roles switches screens inside the same account (client-side); the JWT already carries all roles and `homeScreen` is the default (highest role). No public user list. Demo accounts: `docs/demo-accounts.md`. |
 | **S2 Notifications**: approvals waiting, sent-back claims, payout done | `GET /api/notifications?unread=` · `GET /api/notifications/unread-count` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` |
 | **S3 Audit trail (per claim)**: read-only, append-only timeline | `GET /api/claims/{id}/audit-trail` |
 

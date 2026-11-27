@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -38,6 +39,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@AutoConfigureMetrics // Boot disables metrics export in tests by default; MetricsIT scrapes /actuator/prometheus
 public abstract class ApiTestSupport {
 
     @LocalServerPort
@@ -246,6 +248,45 @@ public abstract class ApiTestSupport {
         Map<String, Object> body = new java.util.HashMap<>(extra);
         body.put("version", claim.path("version").asInt());
         return post(email, "/api/claims/" + claim.path("id").asString() + "/" + action, body);
+    }
+
+    /** Approves the current step and asserts 200; returns the updated claim. */
+    protected JsonNode approve(String email, JsonNode claim) {
+        Res r = act(email, "approve", claim, Map.of());
+        assertThat(r.status()).as(r.body().toString()).isEqualTo(200);
+        return r.body();
+    }
+
+    /** A routed claim (airfare has no policy rule) for exactly {@code amount}, with a receipt. */
+    protected JsonNode routedClaim(Person p, String amount) {
+        return submitOk(p.email(), draft(p.email(), line("AIRFARE", amount, weekday(2), unique("IndiGo"))));
+    }
+
+    /** A claim waiting for an auditor (above 25000, approved by the manager). */
+    protected JsonNode pendingAuditor(Person p, String amount) {
+        JsonNode c = approve(p.managerEmail(), routedClaim(p, amount));
+        assertThat(c.path("status").asString()).isEqualTo("PENDING_AUDITOR");
+        return c;
+    }
+
+    /**
+     * Submits small clean claims until the one-in-ten sampler tags one (at most two blocks of 10), then returns it.
+     * Amounts vary so the claims are never duplicates of each other.
+     */
+    protected JsonNode sampledClaim(Person p) {
+        for (int i = 0; i < 25; i++) {
+            JsonNode c = submitOk(p.email(), draft(p.email(),
+                    line("LOCAL_CAB", (150 + i) + ".00", weekday(i % 5), unique("Meru"))));
+            assertThat(c.path("status").asString()).isEqualTo("AUTO_APPROVED");
+            if (c.path("sampleAudit").asBoolean()) {
+                return c;
+            }
+        }
+        throw new AssertionError("no sample-tagged claim after 25 auto-approved claims");
+    }
+
+    protected UUID idOf(String email) {
+        return jdbc.sql("SELECT id FROM app_user WHERE email = :e").param("e", email).query(UUID.class).single();
     }
 
     protected static List<String> texts(JsonNode array, String field) {

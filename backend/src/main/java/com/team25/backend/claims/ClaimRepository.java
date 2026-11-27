@@ -238,6 +238,26 @@ public class ClaimRepository {
         return counts;
     }
 
+    /** Claim summaries matching a server-built WHERE (never user text; user values go through {@code params}). */
+    public List<ClaimSummary> listWhere(List<String> where, Map<String, Object> params, String orderBy, int page, int size) {
+        String sql = SUMMARY_SELECT + (where.isEmpty() ? "" : " WHERE " + String.join(" AND ", where))
+                + " ORDER BY " + orderBy + ", c.id OFFSET :offset LIMIT :limit";
+        var spec = jdbc.sql(sql);
+        for (var e : params.entrySet()) {
+            spec = spec.param(e.getKey(), e.getValue());
+        }
+        return spec.param("offset", page * size).param("limit", size)
+                .query(ClaimRepository::mapClaim).list().stream().map(ClaimRow::summary).toList();
+    }
+
+    public long countWhere(List<String> where, Map<String, Object> params) {
+        var spec = jdbc.sql("SELECT count(*) FROM expense_claim c" + (where.isEmpty() ? "" : " WHERE " + String.join(" AND ", where)));
+        for (var e : params.entrySet()) {
+            spec = spec.param(e.getKey(), e.getValue());
+        }
+        return spec.query(Long.class).single();
+    }
+
     private record Where(String sql, Map<String, Object> params) {
     }
 

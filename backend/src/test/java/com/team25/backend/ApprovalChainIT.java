@@ -138,6 +138,28 @@ class ApprovalChainIT extends ApiTestSupport {
     }
 
     @Test
+    void US6_AC1_US6_AC3_managerReviewShowsWeekendFlagAndNamesTheMatchedDuplicateLine() {
+        Person p = freshEmployee();
+        String vendor = unique("Chai Point");
+        JsonNode first = submitOk(p.email(), draft(p.email(), line("MEALS", "210.00", weekday(3), vendor)));
+        JsonNode c = submitOk(p.email(), draft(p.email(), line("MEALS", "210.00", weekday(3), vendor),
+                line("LOCAL_CAB", "300.00", saturday(), "Ola")));
+        JsonNode review = get(p.managerEmail(), "/api/claims/" + c.path("id").asString()).body();
+        assertThat(review.path("allowedActions").toString()).contains("APPROVE");
+        JsonNode dup = null;
+        for (JsonNode f : review.path("lines").get(0).path("findings")) {
+            if (f.path("reasonCode").asString().equals("DUPLICATE")) {
+                dup = f;
+            }
+        }
+        assertThat(dup).isNotNull();
+        assertThat(dup.path("matchedClaimNumber").asString()).isEqualTo(first.path("claimNumber").asString());
+        assertThat(dup.path("matchedLineNo").asInt()).isEqualTo(1);
+        assertThat(review.path("lines").get(1).path("findings").toString()).contains("WEEKEND_EXPENSE");
+        assertThat(review.path("flags").toString()).contains("DUPLICATE", "WEEKEND_EXPENSE");
+    }
+
+    @Test
     void US4_AC1_claimDetailShowsStatusHistoryAndEveryComment() {
         Person p = freshEmployee();
         JsonNode c = routed(p, "990.00");

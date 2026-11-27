@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ExpenseFlow API
-  version: 0.2.0
+  version: 0.3.0
   summary: Expense claims, versioned policy checks, approval chain, sample audits, payouts, notifications and audit trail.
   description: |
     ExpenseFlow (Track A) REST API.
@@ -75,7 +75,7 @@ paths:
         **Roles:** public. Email (case-insensitive) + password, checked against a BCrypt hash.
         Unknown email, wrong password and inactive user all return **401** with the same message,
         "Email or password is incorrect", so the response never reveals which accounts exist.
-        "Role switch" on S1 = signing out and in as a different user. The JWT carries **all** of the user's
+        "Role switch" (wireframes v4) happens inside one account: the frontend switches screens between the roles in the JWT; it does not change the account. The JWT carries **all** of the user's
         roles; there is no active-role selection. Every success writes a `LOGIN` audit event and every
         failure a `LOGIN_FAILED` event (attempted email in `details`, never the password).
       x-roles: [PUBLIC]
