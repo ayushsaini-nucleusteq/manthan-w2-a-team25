@@ -1,0 +1,12 @@
+# Local secrets
+.env
+
+# Incident evidence captures
+incident/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
